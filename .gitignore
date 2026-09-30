@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project: raw source files and processed output are reproducible from scripts
+data/raw/
+data/processed/

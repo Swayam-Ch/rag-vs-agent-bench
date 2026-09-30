@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rag-vs-agent-bench"
+version = "0.1.0"
+description = "A reproducible benchmark: does agentic file search beat vector search?"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Vandana Chadha" }]
+dependencies = [
+    "pypdf>=3.17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "reportlab>=4",  # only used to build tiny PDFs inside tests
+]
+
+[project.scripts]
+ragbench-ingest = "ragbench.pipeline.ingest:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ragbench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
