@@ -1,5 +1,7 @@
 # rag-vs-agent-bench
 
+[![CI](https://github.com/Swayam-Ch/rag-vs-agent-bench/actions/workflows/ci.yml/badge.svg)](https://github.com/Swayam-Ch/rag-vs-agent-bench/actions/workflows/ci.yml)
+
 **Does agentic file search beat vector search?** A reproducible benchmark on public data.
 
 This repo compares three ways of answering questions over a document corpus:
