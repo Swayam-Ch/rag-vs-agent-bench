@@ -23,7 +23,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 
-# put some PDFs in data/raw/, then:
+# download the corpus defined in data/sources.txt (~1 min, rate-limited), then ingest it
+ragbench-fetch data/sources.txt data/raw -v
 ragbench-ingest data/raw data/processed -v
 ```
 
@@ -36,7 +37,9 @@ ragbench-ingest data/raw data/processed -v
 ## Layout
 
 ```
+data/sources.txt       # the corpus: 20 arXiv IDs (PDFs themselves are not committed)  ✅
 src/ragbench/
+  pipeline/fetch.py    # download the PDFs listed in sources.txt                   ✅
   pipeline/ingest.py   # PDF/txt/md -> clean markdown + manifest   ✅
   pipeline/chunk.py    #                                            ⏳
   search/              # vector, hybrid, agent backends             ⏳
