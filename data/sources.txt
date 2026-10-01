@@ -1,0 +1,30 @@
+# Corpus definition for rag-vs-agent-bench.
+# One arXiv ID per line; `#` starts a comment. Rebuild the corpus with:
+#   ragbench-fetch data/sources.txt data/raw
+#
+# The papers deliberately overlap in topic (retrieval, RAG, LLMs) so the
+# question set can include multi-filter and cross-document questions.
+
+# Retrieval-augmented generation & dense retrieval
+2005.11401  # Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (RAG)
+2004.04906  # Dense Passage Retrieval for Open-Domain Question Answering (DPR)
+2002.08909  # REALM: Retrieval-Augmented Language Model Pre-Training
+2208.03299  # Atlas: Few-shot Learning with Retrieval Augmented Language Models
+2310.11511  # Self-RAG
+2312.10997  # Retrieval-Augmented Generation for Large Language Models: A Survey
+2212.10496  # Precise Zero-Shot Dense Retrieval without Relevance Labels (HyDE)
+2112.09118  # Unsupervised Dense Information Retrieval with Contrastive Learning (Contriever)
+2004.12832  # ColBERT
+2104.08663  # BEIR: A Heterogeneous Benchmark for Zero-shot Evaluation of IR Models
+1908.10084  # Sentence-BERT
+2307.03172  # Lost in the Middle: How Language Models Use Long Contexts
+
+# Foundations & agents
+1706.03762  # Attention Is All You Need
+1810.04805  # BERT
+2005.14165  # Language Models are Few-Shot Learners (GPT-3)
+2203.02155  # Training language models to follow instructions with human feedback (InstructGPT)
+2201.11903  # Chain-of-Thought Prompting Elicits Reasoning in Large Language Models
+2210.03629  # ReAct: Synergizing Reasoning and Acting in Language Models
+2302.04761  # Toolformer: Language Models Can Teach Themselves to Use Tools
+2106.09685  # LoRA: Low-Rank Adaptation of Large Language Models

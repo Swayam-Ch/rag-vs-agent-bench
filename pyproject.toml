@@ -12,6 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "Vandana Chadha" }]
 dependencies = [
     "pypdf>=3.17",
+    "requests>=2.31",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +23,7 @@ dev = [
 ]
 
 [project.scripts]
+ragbench-fetch = "ragbench.pipeline.fetch:main"
 ragbench-ingest = "ragbench.pipeline.ingest:main"
 
 [tool.hatch.build.targets.wheel]
