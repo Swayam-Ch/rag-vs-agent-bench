@@ -4,8 +4,12 @@ The sources file is the single, committed definition of the corpus: one arXiv ID
 per line, `#` starts a comment. Downloaded PDFs are not committed (see .gitignore);
 anyone can rebuild the exact corpus from this file.
 
+Every PDF's SHA-256 is recorded in `data/checksums.sha256` (committed) the first time
+it is downloaded, and checked on every later run.
+
 Usage:
-    ragbench-fetch data/sources.txt data/raw
+    ragbench-fetch data/sources.txt data/raw            # download + record/verify checksums
+    ragbench-fetch data/sources.txt data/raw --verify   # verify only, no network
 """
 
 from __future__ import annotations
@@ -17,6 +21,8 @@ import sys
 import time
 from pathlib import Path
 from typing import Protocol
+
+from ragbench.pipeline.checksums import read_checksums, sha256_file, verify, write_checksums
 
 log = logging.getLogger(__name__)
 
@@ -116,10 +122,52 @@ def fetch_all(
     return downloaded, skipped
 
 
+def check_corpus(
+    ids: list[str], dest_dir: Path, checksums_path: Path, record_new: bool
+) -> tuple[list[str], list[str]]:
+    """Verify downloaded PDFs against the committed checksums.
+
+    With `record_new=True`, PDFs that have no checksum yet are hashed and added to the
+    file (the lock-file step after a download). With `record_new=False`, a missing
+    checksum counts as a problem. Entries for IDs no longer in the sources are dropped.
+
+    Returns (problems, newly_recorded_names).
+    """
+    names = [f"{arxiv_id}.pdf" for arxiv_id in ids]
+    recorded = read_checksums(checksums_path)
+
+    expected = {n: recorded[n] for n in names if n in recorded}
+    problems = verify(dest_dir, expected)
+
+    new: list[str] = []
+    for name in names:
+        if name in recorded:
+            continue
+        if not record_new:
+            problems.append(f"no checksum recorded: {name}")
+        elif (dest_dir / name).exists():
+            expected[name] = sha256_file(dest_dir / name)
+            new.append(name)
+
+    if record_new and (new or expected.keys() != recorded.keys()):
+        write_checksums(checksums_path, expected)
+    return problems, new
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Download arXiv PDFs listed in a sources file")
     parser.add_argument("sources", type=Path, help="text file with one arXiv ID per line")
     parser.add_argument("dest", type=Path, help="folder to save PDFs into")
+    parser.add_argument(
+        "--checksums",
+        type=Path,
+        help="checksum file (default: checksums.sha256 next to the sources file)",
+    )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="don't download; only check existing PDFs against the checksums",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -127,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(message)s",
     )
+    checksums_path = args.checksums or args.sources.parent / "checksums.sha256"
 
     try:
         ids = parse_sources(args.sources.read_text(encoding="utf-8"))
@@ -134,18 +183,33 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    import requests  # imported here so the pure functions above need no network library
+    if not args.verify:
+        import requests  # imported here so the pure functions above need no network library
 
-    args.dest.mkdir(parents=True, exist_ok=True)
-    with requests.Session() as session:
-        session.headers["User-Agent"] = USER_AGENT
-        try:
-            downloaded, skipped = fetch_all(ids, args.dest, session)
-        except (requests.RequestException, ValueError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
+        args.dest.mkdir(parents=True, exist_ok=True)
+        with requests.Session() as session:
+            session.headers["User-Agent"] = USER_AGENT
+            try:
+                downloaded, skipped = fetch_all(ids, args.dest, session)
+            except (requests.RequestException, ValueError) as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+        print(f"{len(downloaded)} downloaded, {len(skipped)} already present, in {args.dest}")
 
-    print(f"{len(downloaded)} downloaded, {len(skipped)} already present, in {args.dest}")
+    try:
+        problems, new = check_corpus(ids, args.dest, checksums_path, record_new=not args.verify)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if new:
+        print(f"recorded {len(new)} new checksums in {checksums_path} (commit this file)")
+    if problems:
+        for problem in problems:
+            print(f"error: {problem}", file=sys.stderr)
+        print(f"{len(problems)} of {len(ids)} PDFs failed verification", file=sys.stderr)
+        return 1
+    print(f"all {len(ids)} PDFs match {checksums_path}")
     return 0
 
 
