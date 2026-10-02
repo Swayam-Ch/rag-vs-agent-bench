@@ -55,6 +55,7 @@ class Document:
     text: str  # clean markdown body (no front matter)
     page_offsets: list[int] = field(default_factory=list)  # char index where each page starts
     sha256: str = ""  # full hash of the original bytes
+    references_removed: int = 0  # raw characters cut by strip_references (0 = none found)
 
     def manifest_entry(self) -> dict:
         """Everything except the (large) text body."""
@@ -95,6 +96,49 @@ def normalize_text(raw: str) -> str:
     text = re.sub(r" *\n *", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+# A heading on a line of its own: "References", "REFERENCES", "7 References", "Bibliography".
+# Requiring the whole line means the word inside a sentence never matches.
+_REFERENCES_HEADING = re.compile(
+    r"^[ \t]*(?:\d+\.?[ \t]*)?(?:references|bibliography)[ \t]*$", re.IGNORECASE | re.MULTILINE
+)
+# Where appendices restart real content after the bibliography.
+_APPENDIX_HEADING = re.compile(
+    r"^[ \t]*(?:appendix|appendices|supplementary material)\b.*$", re.IGNORECASE | re.MULTILINE
+)
+
+
+def strip_references(pages: list[str]) -> tuple[list[str], int]:
+    """Remove the bibliography from raw (not yet normalised) page texts.
+
+    Cuts from the *last* References/Bibliography heading up to the next Appendix
+    heading, or to the end of the document if there is none, so appendices survive.
+    The number of pages never changes (emptied pages stay as ""), which keeps page
+    numbers aligned with the PDF.
+
+    Returns (pages, number_of_characters_removed).
+    """
+    start = None  # (page index, char index) of the heading
+    for i, page in enumerate(pages):
+        for match in _REFERENCES_HEADING.finditer(page):
+            start = (i, match.start())
+    if start is None:
+        return pages, 0
+
+    out = list(pages)
+    removed = 0
+    page_idx, pos = start
+    while page_idx < len(out):
+        page = out[page_idx]
+        appendix = _APPENDIX_HEADING.search(page, pos)
+        end = appendix.start() if appendix else len(page)
+        out[page_idx] = page[:pos] + page[end:]
+        removed += end - pos
+        if appendix:
+            break
+        page_idx, pos = page_idx + 1, 0
+    return out, removed
 
 
 def guess_title(text: str, fallback: str) -> str:
@@ -140,12 +184,17 @@ def extract_pages(path: Path) -> list[str]:
 # --------------------------------------------------------------------------- #
 
 
-def ingest_file(path: Path) -> Document:
+def ingest_file(path: Path, keep_references: bool = False) -> Document:
     """Read one file and return a cleaned Document."""
     raw_bytes = path.read_bytes()
     digest = hashlib.sha256(raw_bytes).hexdigest()
 
-    pages = [normalize_text(p) for p in extract_pages(path)]
+    raw_pages = extract_pages(path)
+    removed = 0
+    if not keep_references:
+        # must run before normalize_text, which joins the heading line onto the next one
+        raw_pages, removed = strip_references(raw_pages)
+    pages = [normalize_text(p) for p in raw_pages]
 
     # join pages with a blank line and remember where each one starts
     offsets: list[int] = []
@@ -167,10 +216,11 @@ def ingest_file(path: Path) -> Document:
         text=text,
         page_offsets=offsets,
         sha256=digest,
+        references_removed=removed,
     )
 
 
-def ingest_dir(src: Path, dest: Path) -> list[Document]:
+def ingest_dir(src: Path, dest: Path, keep_references: bool = False) -> list[Document]:
     """Ingest every supported file in `src`, writing `<doc_id>.md` + manifest.jsonl to `dest`."""
     files = sorted(p for p in src.rglob("*") if p.suffix.lower() in SUPPORTED_SUFFIXES)
     if not files:
@@ -179,10 +229,18 @@ def ingest_dir(src: Path, dest: Path) -> list[Document]:
     dest.mkdir(parents=True, exist_ok=True)
     docs: list[Document] = []
     for path in files:
-        doc = ingest_file(path)
+        doc = ingest_file(path, keep_references=keep_references)
         (dest / f"{doc.doc_id}.md").write_text(doc.text + "\n", encoding="utf-8")
         docs.append(doc)
-        log.info("ingested %-40s -> %s.md (%d chars)", path.name, doc.doc_id, len(doc.text))
+        log.info(
+            "ingested %-40s -> %s.md (%d chars, %d reference chars removed)",
+            path.name,
+            doc.doc_id,
+            len(doc.text),
+            doc.references_removed,
+        )
+        if not keep_references and doc.references_removed == 0:
+            log.warning("%s: no References heading found", path.name)
 
     manifest = dest / "manifest.jsonl"
     with manifest.open("w", encoding="utf-8") as fh:
@@ -195,6 +253,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("src", type=Path, help="folder of raw PDFs / text files")
     parser.add_argument("dest", type=Path, help="output folder for markdown + manifest")
+    parser.add_argument(
+        "--keep-references", action="store_true", help="don't strip the bibliography"
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -203,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s %(message)s",
     )
     try:
-        docs = ingest_dir(args.src, args.dest)
+        docs = ingest_dir(args.src, args.dest, keep_references=args.keep_references)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
