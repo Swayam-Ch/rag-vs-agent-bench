@@ -28,6 +28,7 @@ import re
 import sys
 import unicodedata
 from dataclasses import asdict, dataclass, field
+from itertools import pairwise
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -107,37 +108,78 @@ _REFERENCES_HEADING = re.compile(
 _APPENDIX_HEADING = re.compile(
     r"^[ \t]*(?:appendix|appendices|supplementary material)\b.*$", re.IGNORECASE | re.MULTILINE
 )
+# Lettered appendix sections: "A Additional results", "A.1 MMLU", "B.2.1 Details".
+# No dot after the letter, so author initials ("A. Vaswani, N. Shazeer") never match.
+_LETTERED_HEADING = re.compile(
+    r"^[ \t]*(?P<label>[A-H](?:\.\d+)*)[ \t]+[A-Z][^\n]{2,80}$", re.MULTILINE
+)
+
+
+def _is_next_label(prev: str, nxt: str) -> bool:
+    """True if `nxt` can directly follow `prev` in an appendix outline.
+
+    From "A.1" the next heading may be "A.1.1" (go deeper), "A.2" (sibling), or
+    "B" / "A" -> "B" etc. (back up a level and step on).
+    """
+    p, n = prev.split("."), nxt.split(".")
+    if n == p + ["1"]:
+        return True
+    for depth in range(len(p)):
+        head, last = p[: depth + 1], p[depth]
+        stepped = chr(ord(last) + 1) if depth == 0 else str(int(last) + 1)
+        if n == head[:-1] + [stepped]:
+            return True
+    return False
+
+
+def _lettered_appendix_start(text: str, pos: int) -> int | None:
+    """Position of the first lettered appendix heading after `pos`, or None.
+
+    A candidate only counts if the next candidate continues the outline
+    (A -> A.1 or B, A.1 -> A.2 ...). A wrapped reference line that happens to look like
+    "A Survey of Dense Retrieval" is never followed by "A.1" or "B", so it is skipped.
+    """
+    found = [(m.start(), m["label"]) for m in _LETTERED_HEADING.finditer(text, pos)]
+    for (start, label), (_, nxt) in pairwise(found):
+        if label in ("A", "A.1") and _is_next_label(label, nxt):
+            return start
+    return None
 
 
 def strip_references(pages: list[str]) -> tuple[list[str], int]:
     """Remove the bibliography from raw (not yet normalised) page texts.
 
-    Cuts from the *last* References/Bibliography heading up to the next Appendix
-    heading, or to the end of the document if there is none, so appendices survive.
-    The number of pages never changes (emptied pages stay as ""), which keeps page
-    numbers aligned with the PDF.
+    Cuts from the *last* References/Bibliography heading up to where the appendices
+    begin: an "Appendix" heading or a lettered outline ("A ...", "A.1 ...", "B ...").
+    With no appendix, it cuts to the end of the document. The number of pages never
+    changes (emptied pages stay as ""), which keeps page numbers aligned with the PDF.
 
     Returns (pages, number_of_characters_removed).
     """
-    start = None  # (page index, char index) of the heading
-    for i, page in enumerate(pages):
-        for match in _REFERENCES_HEADING.finditer(page):
-            start = (i, match.start())
-    if start is None:
+    text = "\n".join(pages)  # one string so headings can be found across page breaks
+    heads = list(_REFERENCES_HEADING.finditer(text))
+    if not heads:
         return pages, 0
+    start = heads[-1].start()
 
-    out = list(pages)
-    removed = 0
-    page_idx, pos = start
-    while page_idx < len(out):
-        page = out[page_idx]
-        appendix = _APPENDIX_HEADING.search(page, pos)
-        end = appendix.start() if appendix else len(page)
-        out[page_idx] = page[:pos] + page[end:]
-        removed += end - pos
-        if appendix:
-            break
-        page_idx, pos = page_idx + 1, 0
+    ends = [len(text)]
+    if explicit := _APPENDIX_HEADING.search(text, start):
+        ends.append(explicit.start())
+    if (lettered := _lettered_appendix_start(text, start)) is not None:
+        ends.append(lettered)
+    end = min(ends)
+
+    # cut [start, end) out of each page that overlaps it
+    out: list[str] = []
+    page_start = 0
+    for page in pages:
+        page_end = page_start + len(page)
+        lo, hi = max(start, page_start), min(end, page_end)
+        if lo < hi:
+            page = page[: lo - page_start] + page[hi - page_start :]
+        out.append(page)
+        page_start = page_end + 1  # +1 for the "\n" joining pages
+    removed = sum(map(len, pages)) - sum(map(len, out))
     return out, removed
 
 

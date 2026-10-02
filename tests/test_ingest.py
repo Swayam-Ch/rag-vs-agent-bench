@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from ragbench.pipeline.ingest import (
+    _is_next_label,
     guess_title,
     ingest_dir,
     ingest_file,
@@ -173,3 +174,70 @@ def test_ingest_strips_references_by_default(tmp_path):
     kept = ingest_file(src, keep_references=True)
     assert "A Paper" in kept.text
     assert kept.references_removed == 0
+
+
+# --- lettered appendices (seen in InstructGPT, ReAct, BEIR, Atlas) ---
+
+LETTERED = "A Training details and additional results\nA.1 MMLU\nWe use 5-shot prompts.\n"
+
+
+def test_lettered_appendix_is_kept():
+    pages, _ = strip_references([BODY + REFS + LETTERED])
+    assert pages == [BODY + LETTERED]
+
+
+def test_appendix_starting_at_a1_is_kept():
+    # ReAct's top-level "A" heading is mangled by PDF extraction; its outline starts at A.1
+    appendix = "A.1 GPT-3 Experiments\nResults.\nA.2 Up-to-date knowledge\nMore.\n"
+    pages, _ = strip_references([BODY + REFS, appendix])
+    assert pages == [BODY, appendix]
+
+
+def test_lettered_appendix_found_across_pages():
+    pages, _ = strip_references([BODY + REFS, "[3] C. Author. 2022.\n" + LETTERED])
+    assert pages == [BODY, LETTERED]
+
+
+def test_author_initials_are_not_headings():
+    refs = (
+        "References\n"
+        "A. Vaswani, N. Shazeer, N. Parmar. Attention. 2017.\n"
+        "B. Smith. Retrieval. 2019.\n"
+    )
+    pages, _ = strip_references([BODY + refs])
+    assert pages == [BODY]
+
+
+def test_reference_title_line_is_not_an_appendix():
+    # a wrapped reference that starts like a heading, with no outline after it
+    refs = (
+        "References\n[1] Lewis et al. 2020.\n"
+        "A Survey of Dense Retrieval Methods\n"
+        "[2] Izacard. 2021.\n"
+    )
+    pages, _ = strip_references([BODY + refs])
+    assert pages == [BODY]
+
+
+def test_reference_title_line_before_real_appendix():
+    refs = "References\n[1] Lewis.\nA Survey of Dense Retrieval Methods\n[2] Izacard.\n"
+    pages, _ = strip_references([BODY + refs + LETTERED])
+    assert pages == [BODY + LETTERED]
+
+
+@pytest.mark.parametrize(
+    ("prev", "nxt", "ok"),
+    [
+        ("A", "A.1", True),
+        ("A", "B", True),
+        ("A.1", "A.2", True),
+        ("A.1", "A.1.1", True),
+        ("A.1", "B", True),
+        ("A.2.2", "A.3", True),
+        ("A", "A", False),
+        ("A", "C", False),
+        ("A.1", "A.3", False),
+    ],
+)
+def test_is_next_label(prev, nxt, ok):
+    assert _is_next_label(prev, nxt) is ok
