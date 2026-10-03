@@ -296,11 +296,35 @@ def test_repeated_line_in_middle_of_page_is_kept():
     assert removed == []
 
 
-@pytest.mark.parametrize("number", ["7", "Page 7", "7 of 12", "7/12"])
-def test_page_number_formats(number):
-    out, removed = remove_repeated_lines([f"Text A.\n{number}", f"Text B.\n{number}"])
-    assert out == ["Text A.", "Text B."]
-    assert removed == [number, number]
+@pytest.mark.parametrize("template", ["{n}", "Page {n}", "{n} of 12", "{n}/12"])
+def test_page_number_formats(template):
+    pages = [f"Text {n}.\n" + template.format(n=n) for n in (1, 2, 3)]
+    out, removed = remove_repeated_lines(pages)
+    assert out == ["Text 1.", "Text 2.", "Text 3."]
+    assert len(removed) == 3
+
+
+def test_unnumbered_cover_page_shifts_the_sequence():
+    # cover has no number; page 2 of the PDF prints "1", page 3 prints "2", ...
+    pages = ["Title page."] + [f"Body {n}.\n{n}" for n in (1, 2, 3, 4)]
+    out, removed = remove_repeated_lines(pages)
+    assert out == ["Title page.", "Body 1.", "Body 2.", "Body 3.", "Body 4."]
+    assert removed == ["1", "2", "3", "4"]
+
+
+def test_chart_tick_labels_at_page_edge_are_kept():
+    # seen in Chain-of-Thought / Lost in the Middle: a figure's axis at the bottom of a page
+    pages = [f"Body {n}.\n{n}" for n in (1, 2, 3, 4)]
+    pages[1] = "Figure 2: accuracy.\n0\n20\n40\n2"
+    out, removed = remove_repeated_lines(pages)
+    assert out[1] == "Figure 2: accuracy.\n0\n20\n40"  # ticks kept, page number "2" gone
+    assert removed == ["1", "2", "3", "4"]
+
+
+def test_numbers_that_never_follow_the_pages_are_kept():
+    rows = [("Recall on NQ", "44"), ("Recall on TQA", "65"), ("EM", "50"), ("F1", "50")]
+    pages = [f"{caption}\n{value}" for caption, value in rows]
+    assert remove_repeated_lines(pages) == (pages, [])
 
 
 def test_lone_number_in_single_page_file_is_kept():
