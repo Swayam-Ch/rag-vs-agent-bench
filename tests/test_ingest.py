@@ -10,6 +10,7 @@ from ragbench.pipeline.ingest import (
     ingest_file,
     main,
     normalize_text,
+    remove_repeated_lines,
     strip_references,
 )
 
@@ -241,3 +242,77 @@ def test_reference_title_line_before_real_appendix():
 )
 def test_is_next_label(prev, nxt, ok):
     assert _is_next_label(prev, nxt) is ok
+
+
+# --------------------------------------------------------------------------- #
+# remove_repeated_lines (running headers / footers / page numbers)
+# --------------------------------------------------------------------------- #
+
+
+def _paper(n_pages: int, header: str = "Published as a conference paper at ICLR 2023") -> list[str]:
+    return [
+        f"{header}\nBody text of page {i}.\nMore findings on page {i}.\n{i}"
+        for i in range(1, n_pages + 1)
+    ]
+
+
+def test_running_header_and_page_numbers_removed():
+    pages, removed = remove_repeated_lines(_paper(4))
+    assert pages[0] == "Body text of page 1.\nMore findings on page 1."
+    assert removed.count("Published as a conference paper at ICLR 2023") == 4
+    assert len(removed) == 8  # 4 headers + 4 page numbers
+
+
+@pytest.mark.parametrize("header", ["Under review as a conference paper {i}", "{i} Preprint"])
+def test_header_with_page_number_counts_as_repeated(header):
+    pages = [header.format(i=i) + f"\nContent {i}." for i in range(1, 5)]
+    out, _ = remove_repeated_lines(pages)
+    assert out == [f"Content {i}." for i in range(1, 5)]
+
+
+def test_numbers_inside_body_lines_still_count():
+    pages = [f"Results on dataset {i} are strong.\nOther text {i}." for i in range(4)]
+    assert remove_repeated_lines(pages) == (pages, [])
+
+
+def test_header_on_too_few_pages_is_kept():
+    pages = ["Special note\nA."] + [f"Body {i}." for i in range(5)]
+    out, removed = remove_repeated_lines(pages)
+    assert out[0] == "Special note\nA."
+    assert removed == []
+
+
+def test_repeated_line_in_middle_of_page_is_kept():
+    middle = "As shown in Table 1, retrieval helps."
+    words = ["alpha", "beta", "gamma", "delta"]
+    pages = [
+        "\n".join(
+            [f"{w} one", f"{w} two", f"{w} three", middle, f"{w} five", f"{w} six", f"{w} seven"]
+        )
+        for w in words
+    ]
+    out, removed = remove_repeated_lines(pages)
+    assert all(middle in page for page in out)
+    assert removed == []
+
+
+@pytest.mark.parametrize("number", ["7", "Page 7", "7 of 12", "7/12"])
+def test_page_number_formats(number):
+    out, removed = remove_repeated_lines([f"Text A.\n{number}", f"Text B.\n{number}"])
+    assert out == ["Text A.", "Text B."]
+    assert removed == [number, number]
+
+
+def test_lone_number_in_single_page_file_is_kept():
+    assert remove_repeated_lines(["2020\nA year to remember."]) == (
+        ["2020\nA year to remember."],
+        [],
+    )
+
+
+def test_ingest_records_boilerplate_count(tmp_path):
+    pdf = tmp_path / "paper.pdf"
+    _make_pdf(pdf, ["Header Line", "Header Line", "Header Line"])
+    doc = ingest_file(pdf)
+    assert doc.boilerplate_lines_removed == 3
+    assert "Header Line" not in doc.text

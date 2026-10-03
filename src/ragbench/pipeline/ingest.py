@@ -27,6 +27,7 @@ import logging
 import re
 import sys
 import unicodedata
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from itertools import pairwise
 from pathlib import Path
@@ -57,6 +58,7 @@ class Document:
     page_offsets: list[int] = field(default_factory=list)  # char index where each page starts
     sha256: str = ""  # full hash of the original bytes
     references_removed: int = 0  # raw characters cut by strip_references (0 = none found)
+    boilerplate_lines_removed: int = 0  # repeated header/footer + page-number lines cut
 
     def manifest_entry(self) -> dict:
         """Everything except the (large) text body."""
@@ -183,6 +185,65 @@ def strip_references(pages: list[str]) -> tuple[list[str], int]:
     return out, removed
 
 
+EDGE_LINES = 3  # headers/footers live in the first/last few lines of a page
+_PAGE_NUMBER = re.compile(r"^(?:page\s*)?\d{1,4}(?:\s*(?:of|/)\s*\d{1,4})?$", re.IGNORECASE)
+
+
+def _boilerplate_key(line: str) -> str:
+    """Normalise a line so the same header on different pages compares equal.
+
+    Case and spacing are ignored, and so is a page number standing as a word at the
+    start or end ("3 Published at ICLR", "Under review 12"). Numbers inside the line
+    still count, so "results on page 1." and "results on page 2." stay different.
+    """
+    tokens = line.lower().split()
+    if tokens and tokens[0].isdigit():
+        tokens = tokens[1:]
+    if tokens and tokens[-1].isdigit():
+        tokens = tokens[:-1]
+    return " ".join(tokens)
+
+
+def _edge_indices(lines: list[str]) -> list[int]:
+    """Indices of the first and last EDGE_LINES non-empty lines of a page."""
+    filled = [i for i, line in enumerate(lines) if line.strip()]
+    return sorted(set(filled[:EDGE_LINES] + filled[-EDGE_LINES:]))
+
+
+def remove_repeated_lines(pages: list[str], min_share: float = 0.5) -> tuple[list[str], list[str]]:
+    """Remove running headers, footers and page numbers from raw page texts.
+
+    A line is boilerplate if it sits near the top or bottom of a page and the same
+    line (digits ignored) appears there on at least `min_share` of the pages, and on
+    at least 2 pages. Standalone page numbers at a page edge are removed too
+    (multi-page documents only).
+    Lines in the middle of a page are never touched.
+
+    Returns (pages, removed_lines).
+    """
+    split = [page.split("\n") for page in pages]
+
+    pages_with_key: Counter[str] = Counter()
+    for lines in split:
+        pages_with_key.update({_boilerplate_key(lines[i]) for i in _edge_indices(lines)})
+    threshold = max(2, min_share * len(pages))
+    repeated = {key for key, n in pages_with_key.items() if n >= threshold}
+    multi_page = len(pages) > 1  # a lone "2020" in a one-page text file is not a page number
+
+    out: list[str] = []
+    removed: list[str] = []
+    for lines in split:
+        drop = {
+            i
+            for i in _edge_indices(lines)
+            if _boilerplate_key(lines[i]) in repeated
+            or (multi_page and _PAGE_NUMBER.match(lines[i].strip()))
+        }
+        removed.extend(lines[i].strip() for i in sorted(drop))
+        out.append("\n".join(line for i, line in enumerate(lines) if i not in drop))
+    return out, removed
+
+
 def guess_title(text: str, fallback: str) -> str:
     """First non-empty line, if it looks like a title; otherwise the file stem."""
     for line in text.splitlines():
@@ -231,7 +292,10 @@ def ingest_file(path: Path, keep_references: bool = False) -> Document:
     raw_bytes = path.read_bytes()
     digest = hashlib.sha256(raw_bytes).hexdigest()
 
-    raw_pages = extract_pages(path)
+    # headers first: emptied reference pages would otherwise dilute the per-page counts
+    raw_pages, boilerplate = remove_repeated_lines(extract_pages(path))
+    if boilerplate:
+        log.info("%s: removed %s", path.name, Counter(boilerplate).most_common(5))
     removed = 0
     if not keep_references:
         # must run before normalize_text, which joins the heading line onto the next one
@@ -259,6 +323,7 @@ def ingest_file(path: Path, keep_references: bool = False) -> Document:
         page_offsets=offsets,
         sha256=digest,
         references_removed=removed,
+        boilerplate_lines_removed=len(boilerplate),
     )
 
 
