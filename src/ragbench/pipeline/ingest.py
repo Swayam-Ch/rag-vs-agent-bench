@@ -186,7 +186,7 @@ def strip_references(pages: list[str]) -> tuple[list[str], int]:
 
 
 EDGE_LINES = 3  # headers/footers live in the first/last few lines of a page
-_PAGE_NUMBER = re.compile(r"^(?:page\s*)?\d{1,4}(?:\s*(?:of|/)\s*\d{1,4})?$", re.IGNORECASE)
+_PAGE_NUMBER = re.compile(r"^(?:page\s*)?(?P<n>\d{1,4})(?:\s*(?:of|/)\s*\d{1,4})?$", re.IGNORECASE)
 
 
 def _boilerplate_key(line: str) -> str:
@@ -210,35 +210,62 @@ def _edge_indices(lines: list[str]) -> list[int]:
     return sorted(set(filled[:EDGE_LINES] + filled[-EDGE_LINES:]))
 
 
+def _page_number_offset(split: list[list[str]], min_pages: float) -> int | None:
+    """The shift between page position and printed page number, if one is consistent.
+
+    Page 5 of the PDF may print "5" (offset 0), or "4" if the cover is unnumbered
+    (offset -1). Chart tick labels and table values at a page edge don't follow the
+    page sequence, so they never agree on an offset.
+    """
+    offsets: Counter[int] = Counter()
+    for position, lines in enumerate(split, start=1):
+        found = set()
+        for i in _edge_indices(lines):
+            if m := _PAGE_NUMBER.match(lines[i].strip()):
+                found.add(int(m["n"]) - position)
+        offsets.update(found)
+    if not offsets:
+        return None
+    offset, count = offsets.most_common(1)[0]
+    return offset if count >= min_pages else None
+
+
 def remove_repeated_lines(pages: list[str], min_share: float = 0.5) -> tuple[list[str], list[str]]:
     """Remove running headers, footers and page numbers from raw page texts.
 
-    A line is boilerplate if it sits near the top or bottom of a page and the same
-    line (digits ignored) appears there on at least `min_share` of the pages, and on
-    at least 2 pages. Standalone page numbers at a page edge are removed too
-    (multi-page documents only).
-    Lines in the middle of a page are never touched.
+    Only lines near the top or bottom of a page are considered; the middle of a page
+    is never touched. Two kinds of line are removed:
+
+    * a header/footer: the same line (case, spacing and an edge page number ignored)
+      at a page edge on at least `min_share` of the pages, and on at least 2 pages;
+    * a page number: a standalone number ("7", "Page 7", "7 of 12") that matches its
+      page's position, using the offset most pages agree on. A number that doesn't
+      follow the page sequence (a chart tick label, a table value) is kept.
 
     Returns (pages, removed_lines).
     """
     split = [page.split("\n") for page in pages]
+    threshold = max(2, min_share * len(pages))
 
     pages_with_key: Counter[str] = Counter()
     for lines in split:
         pages_with_key.update({_boilerplate_key(lines[i]) for i in _edge_indices(lines)})
-    threshold = max(2, min_share * len(pages))
-    repeated = {key for key, n in pages_with_key.items() if n >= threshold}
-    multi_page = len(pages) > 1  # a lone "2020" in a one-page text file is not a page number
+    # "" is the key of a bare number; numbers are handled by the page-sequence rule below
+    repeated = {key for key, n in pages_with_key.items() if key and n >= threshold}
+    offset = _page_number_offset(split, min_pages=max(2, 0.25 * len(pages)))
 
     out: list[str] = []
     removed: list[str] = []
-    for lines in split:
-        drop = {
-            i
-            for i in _edge_indices(lines)
-            if _boilerplate_key(lines[i]) in repeated
-            or (multi_page and _PAGE_NUMBER.match(lines[i].strip()))
-        }
+    for position, lines in enumerate(split, start=1):
+        drop = set()
+        for i in _edge_indices(lines):
+            line = lines[i].strip()
+            number = _PAGE_NUMBER.match(line)
+            if number:
+                if offset is not None and int(number["n"]) - position == offset:
+                    drop.add(i)
+            elif _boilerplate_key(line) in repeated:
+                drop.add(i)
         removed.extend(lines[i].strip() for i in sorted(drop))
         out.append("\n".join(line for i, line in enumerate(lines) if i not in drop))
     return out, removed
