@@ -33,6 +33,7 @@ ragbench-ingest data/raw data/processed -v
 
 - **No front matter in searchable text.** Metadata lives in `manifest.jsonl`, so no method is helped or hurt by boilerplate tokens.
 - **Bibliographies are stripped.** Reference lists repeat paper titles and keywords from across the field, which creates false matches for every method. They're cut at ingestion (appendices are kept); `manifest.jsonl` records how many characters were removed per paper so this can be audited.
+- **Running headers and page numbers are stripped.** A line at the top or bottom of at least half the pages (e.g. *Published as a conference paper at ICLR 2023*) is boilerplate that would otherwise land in many chunks. Mid-page lines are never touched; the manifest records `boilerplate_lines_removed`.
 - **Page offsets are recorded** so answers can be checked against the page they cite.
 - **Pinned inputs.** `data/checksums.sha256` records the SHA-256 of every PDF. Any run on different bytes fails loudly instead of silently producing different numbers.
 - **Deterministic IDs.** A document's ID is a hash of its bytes, so reruns line up.
