@@ -9,8 +9,9 @@ description = "A reproducible benchmark: does agentic file search beat vector se
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Vandana Chadha" }]
+authors = [{ name = "Swayam Chadha" }]
 dependencies = [
+    "fonttools>=4.40",  # lets pypdf decode math fonts (e.g. CMMI10) correctly
     "pypdf>=3.17",
     "requests>=2.31",
 ]

@@ -115,7 +115,13 @@ def test_cli_verify_exit_codes(corpus, capsys):
     sources = sums.parent / "sources.txt"
     sources.write_text("1706.03762\n")
     check_corpus(["1706.03762"], raw, sums, record_new=True)
+    assert main([str(sources), str(raw), "--verify"]) == 1  # no metadata recorded yet
+    assert "no metadata recorded: 1706.03762" in capsys.readouterr().err
 
+    (sums.parent / "metadata.jsonl").write_text(
+        '{"arxiv_id": "1706.03762", "version": "v7", "title": "Attention Is All You Need", '
+        '"authors": ["Ashish Vaswani"], "published": "2017-06-12", "category": "cs.CL"}\n'
+    )
     assert main([str(sources), str(raw), "--verify"]) == 0
 
     (raw / "1706.03762.pdf").write_bytes(b"%PDF different")

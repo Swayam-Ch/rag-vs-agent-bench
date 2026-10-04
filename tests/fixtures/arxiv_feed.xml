@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-written in the arXiv API's Atom format (export.arxiv.org/api/query) so tests never
+     touch the network. Like the real feed, a long title wraps across lines. -->
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <title type="html">ArXiv Query: id_list=2005.11401,1706.03762</title>
+  <opensearch:totalResults>2</opensearch:totalResults>
+  <entry>
+    <id>http://arxiv.org/abs/2005.11401v4</id>
+    <updated>2021-04-12T15:42:15Z</updated>
+    <published>2020-05-22T05:10:33Z</published>
+    <title>Retrieval-Augmented Generation for Knowledge-Intensive NLP
+  Tasks</title>
+    <summary>Large pre-trained language models have been shown to store factual knowledge...</summary>
+    <author><name>Patrick Lewis</name></author>
+    <author><name>Ethan Perez</name></author>
+    <author><name>Aleksandra Piktus</name></author>
+    <arxiv:primary_category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/1706.03762v7</id>
+    <updated>2023-08-02T00:41:18Z</updated>
+    <published>2017-06-12T17:57:34Z</published>
+    <title>Attention Is All You Need</title>
+    <summary>The dominant sequence transduction models are based on complex recurrent...</summary>
+    <author><name>Ashish Vaswani</name></author>
+    <author><name>Noam Shazeer</name></author>
+    <arxiv:primary_category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+</feed>

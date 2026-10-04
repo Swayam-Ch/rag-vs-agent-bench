@@ -36,6 +36,7 @@ ragbench-ingest data/raw data/processed -v
 - **Running headers and page numbers are stripped.** A line at the top or bottom of at least half the pages (e.g. *Published as a conference paper at ICLR 2023*) is boilerplate that would otherwise land in many chunks. Mid-page lines are never touched; the manifest records `boilerplate_lines_removed`.
 - **Page offsets are recorded** so answers can be checked against the page they cite.
 - **Pinned inputs.** `data/checksums.sha256` records the SHA-256 of every PDF. Any run on different bytes fails loudly instead of silently producing different numbers.
+- **Metadata is a committed snapshot.** Titles, authors, dates and categories come from the arXiv API once, at download time, and live in `data/metadata.jsonl`. Ingestion never touches the network.
 - **Deterministic IDs.** A document's ID is a hash of its bytes, so reruns line up.
 
 ## Layout
@@ -43,9 +44,11 @@ ragbench-ingest data/raw data/processed -v
 ```
 data/sources.txt         # the corpus: 20 arXiv IDs (PDFs themselves are not committed)  ✅
 data/checksums.sha256    # SHA-256 of every PDF, checked on each run                     ✅
+data/metadata.jsonl      # title, authors, date, category per paper (from the arXiv API) ✅
 src/ragbench/
   pipeline/fetch.py      # download the PDFs listed in sources.txt                       ✅
   pipeline/checksums.py  # record / verify file hashes                                   ✅
+  pipeline/metadata.py   # arXiv API client + metadata snapshot                          ✅
   pipeline/ingest.py     # PDF/txt/md -> clean markdown + manifest                       ✅
   pipeline/chunk.py      #                                                               ⏳
   search/                # vector, hybrid, agent backends                                ⏳

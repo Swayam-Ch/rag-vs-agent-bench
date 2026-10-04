@@ -67,7 +67,7 @@ def test_ingest_txt(tmp_path):
 
     doc = ingest_file(src)
 
-    assert doc.title == "My Title wrapped line"  # soft wraps joined -> one line
+    assert doc.title == "My Title"  # first line of the raw page, before soft wraps are joined
     assert doc.text.endswith("Next para")
     assert doc.page_offsets == [0]
     assert len(doc.doc_id) == 12
