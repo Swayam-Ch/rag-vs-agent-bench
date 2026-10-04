@@ -32,6 +32,8 @@ from dataclasses import asdict, dataclass, field
 from itertools import pairwise
 from pathlib import Path
 
+from ragbench.pipeline.metadata import PaperMeta, base_id, read_metadata
+
 log = logging.getLogger(__name__)
 
 SUPPORTED_SUFFIXES = {".pdf", ".txt", ".md"}
@@ -59,6 +61,11 @@ class Document:
     sha256: str = ""  # full hash of the original bytes
     references_removed: int = 0  # raw characters cut by strip_references (0 = none found)
     boilerplate_lines_removed: int = 0  # repeated header/footer + page-number lines cut
+    # from data/metadata.jsonl when the file is an arXiv paper; empty otherwise
+    arxiv_id: str = ""
+    authors: list[str] = field(default_factory=list)
+    published: str = ""  # YYYY-MM-DD
+    category: str = ""  # primary arXiv category, e.g. "cs.CL"
 
     def manifest_entry(self) -> dict:
         """Everything except the (large) text body."""
@@ -271,12 +278,30 @@ def remove_repeated_lines(pages: list[str], min_share: float = 0.5) -> tuple[lis
     return out, removed
 
 
-def guess_title(text: str, fallback: str) -> str:
-    """First non-empty line, if it looks like a title; otherwise the file stem."""
-    for line in text.splitlines():
+# Lines at the top of a first page that are never the title.
+_NOT_A_TITLE = re.compile(
+    r"arxiv:|published as|under review|preprint|provided proper attribution|proceedings|"
+    r"conference|workshop|copyright|©|@|https?://|^\W*\d",
+    re.IGNORECASE,
+)
+
+
+def guess_title(first_page: str, fallback: str) -> str:
+    """Best guess at a title from the *raw* (not yet normalised) first page.
+
+    Only a fallback for files without arXiv metadata. Takes the first line that has
+    at least two words, isn't venue/stamp/contact boilerplate and isn't a sentence.
+    Runs on raw text because normalisation merges the opening lines into one paragraph.
+    """
+    for line in first_page.splitlines():
         line = line.strip().lstrip("#").strip()
-        if line:
-            return line if len(line) <= 200 else fallback
+        if (
+            len(line.split()) >= 2
+            and len(line) <= 200
+            and not line.endswith(".")
+            and not _NOT_A_TITLE.search(line)
+        ):
+            return line
     return fallback
 
 
@@ -314,13 +339,21 @@ def extract_pages(path: Path) -> list[str]:
 # --------------------------------------------------------------------------- #
 
 
-def ingest_file(path: Path, keep_references: bool = False) -> Document:
-    """Read one file and return a cleaned Document."""
+def ingest_file(
+    path: Path, keep_references: bool = False, meta: PaperMeta | None = None
+) -> Document:
+    """Read one file and return a cleaned Document.
+
+    `meta` is the paper's arXiv metadata, if known; its title beats any guess.
+    """
     raw_bytes = path.read_bytes()
     digest = hashlib.sha256(raw_bytes).hexdigest()
 
+    extracted = extract_pages(path)
+    title = meta.title if meta else guess_title(extracted[0] if extracted else "", path.stem)
+
     # headers first: emptied reference pages would otherwise dilute the per-page counts
-    raw_pages, boilerplate = remove_repeated_lines(extract_pages(path))
+    raw_pages, boilerplate = remove_repeated_lines(extracted)
     if boilerplate:
         log.info("%s: removed %s", path.name, Counter(boilerplate).most_common(5))
     removed = 0
@@ -345,17 +378,30 @@ def ingest_file(path: Path, keep_references: bool = False) -> Document:
     return Document(
         doc_id=digest[:12],
         source=path.name,
-        title=guess_title(text, fallback=path.stem),
+        title=title,
         text=text,
         page_offsets=offsets,
         sha256=digest,
         references_removed=removed,
         boilerplate_lines_removed=len(boilerplate),
+        arxiv_id=meta.arxiv_id if meta else "",
+        authors=list(meta.authors) if meta else [],
+        published=meta.published if meta else "",
+        category=meta.category if meta else "",
     )
 
 
-def ingest_dir(src: Path, dest: Path, keep_references: bool = False) -> list[Document]:
-    """Ingest every supported file in `src`, writing `<doc_id>.md` + manifest.jsonl to `dest`."""
+def ingest_dir(
+    src: Path,
+    dest: Path,
+    keep_references: bool = False,
+    metadata: dict[str, PaperMeta] | None = None,
+) -> list[Document]:
+    """Ingest every supported file in `src`, writing `<doc_id>.md` + manifest.jsonl to `dest`.
+
+    `metadata` maps arXiv IDs to PaperMeta; a file named `<arXiv ID>.pdf` gets its entry.
+    """
+    metadata = metadata or {}
     files = sorted(p for p in src.rglob("*") if p.suffix.lower() in SUPPORTED_SUFFIXES)
     if not files:
         raise FileNotFoundError(f"No {sorted(SUPPORTED_SUFFIXES)} files found in {src}")
@@ -363,7 +409,8 @@ def ingest_dir(src: Path, dest: Path, keep_references: bool = False) -> list[Doc
     dest.mkdir(parents=True, exist_ok=True)
     docs: list[Document] = []
     for path in files:
-        doc = ingest_file(path, keep_references=keep_references)
+        meta = metadata.get(base_id(path.stem))
+        doc = ingest_file(path, keep_references=keep_references, meta=meta)
         (dest / f"{doc.doc_id}.md").write_text(doc.text + "\n", encoding="utf-8")
         docs.append(doc)
         log.info(
@@ -390,6 +437,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--keep-references", action="store_true", help="don't strip the bibliography"
     )
+    parser.add_argument(
+        "--metadata",
+        type=Path,
+        help="arXiv metadata file (default: metadata.jsonl in the parent of src, if present)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -397,8 +449,14 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(message)s",
     )
+    metadata_path = args.metadata or args.src.parent / "metadata.jsonl"
+    metadata = read_metadata(metadata_path)
+    if metadata:
+        log.info("using titles and metadata from %s", metadata_path)
     try:
-        docs = ingest_dir(args.src, args.dest, keep_references=args.keep_references)
+        docs = ingest_dir(
+            args.src, args.dest, keep_references=args.keep_references, metadata=metadata
+        )
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

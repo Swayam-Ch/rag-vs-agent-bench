@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Protocol
 
 from ragbench.pipeline.checksums import read_checksums, sha256_file, verify, write_checksums
+from ragbench.pipeline.metadata import base_id, read_metadata, sync_metadata
 
 log = logging.getLogger(__name__)
 
@@ -164,6 +165,11 @@ def main(argv: list[str] | None = None) -> int:
         help="checksum file (default: checksums.sha256 next to the sources file)",
     )
     parser.add_argument(
+        "--metadata",
+        type=Path,
+        help="metadata file (default: metadata.jsonl next to the sources file)",
+    )
+    parser.add_argument(
         "--verify",
         action="store_true",
         help="don't download; only check existing PDFs against the checksums",
@@ -176,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s %(message)s",
     )
     checksums_path = args.checksums or args.sources.parent / "checksums.sha256"
+    metadata_path = args.metadata or args.sources.parent / "metadata.jsonl"
 
     try:
         ids = parse_sources(args.sources.read_text(encoding="utf-8"))
@@ -191,16 +198,22 @@ def main(argv: list[str] | None = None) -> int:
             session.headers["User-Agent"] = USER_AGENT
             try:
                 downloaded, skipped = fetch_all(ids, args.dest, session)
+                new_meta = sync_metadata(ids, metadata_path, session)
             except (requests.RequestException, ValueError) as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
         print(f"{len(downloaded)} downloaded, {len(skipped)} already present, in {args.dest}")
+        if new_meta:
+            print(f"recorded metadata for {len(new_meta)} papers in {metadata_path} (commit it)")
 
     try:
         problems, new = check_corpus(ids, args.dest, checksums_path, record_new=not args.verify)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+
+    known = read_metadata(metadata_path)
+    problems += [f"no metadata recorded: {i}" for i in ids if base_id(i) not in known]
 
     if new:
         print(f"recorded {len(new)} new checksums in {checksums_path} (commit this file)")
