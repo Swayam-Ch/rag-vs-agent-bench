@@ -50,7 +50,7 @@ src/ragbench/
   pipeline/checksums.py  # record / verify file hashes                                   ✅
   pipeline/metadata.py   # arXiv API client + metadata snapshot                          ✅
   pipeline/ingest.py     # PDF/txt/md -> clean markdown + manifest                       ✅
-  pipeline/chunk.py      #                                                               ⏳
+  pipeline/chunk.py      # fixed-size chunks with overlap, page-aware        (paragraphs ⏳) ✅
   search/                # vector, hybrid, agent backends                                ⏳
 eval/                    # questions.yaml + run_eval.py                                  ⏳
 results/                 # committed run outputs                                         ⏳
