@@ -1,9 +1,21 @@
 import random
+import re
 import string
 
 import pytest
 
-from ragbench.pipeline.chunk import Chunk, chunk_fixed, page_at
+from ragbench.pipeline.chunk import (
+    Chunk,
+    _split_long,
+    chunk_corpus,
+    chunk_fixed,
+    chunk_paragraphs,
+    main,
+    output_name,
+    page_at,
+    read_chunks,
+    stats,
+)
 
 # --------------------------------------------------------------------------- #
 # page_at
@@ -104,3 +116,166 @@ def test_invariants_on_random_documents(seed):
         assert a.end - b.start == overlap
     # pages never go backwards
     assert [c.page for c in chunks] == sorted(c.page for c in chunks)
+
+
+def test_page_end_ignores_trailing_blank_pages():
+    # three emptied bibliography pages at the end leave only blank separators behind
+    text = "a" * 50 + "\n\n" + "\n\n" * 3
+    offsets = [0, 52, 54, 56]
+    [chunk] = chunk_fixed("d", text, offsets, size=1000, overlap=0)
+    assert chunk.page_end == 1
+
+
+# --------------------------------------------------------------------------- #
+# chunk_paragraphs
+# --------------------------------------------------------------------------- #
+
+
+def test_paragraphs_are_packed_until_the_next_one_would_not_fit():
+    text = "Intro heading\n\nFirst paragraph here.\n\nSecond paragraph here.\n\nThird one."
+    chunks = chunk_paragraphs("d", text, [0], max_size=40)
+    assert [c.text for c in chunks] == [
+        "Intro heading\n\nFirst paragraph here.",
+        "Second paragraph here.\n\nThird one.",
+    ]
+
+
+def test_chunks_never_start_or_end_mid_paragraph():
+    paragraphs = [f"Paragraph {i} " + "word " * (i % 7 + 3) for i in range(30)]
+    text = "\n\n".join(p.strip() for p in paragraphs)
+    for c in chunk_paragraphs("d", text, [0], max_size=120):
+        assert c.start == 0 or text[c.start - 2 : c.start] == "\n\n"
+        assert c.end == len(text) or text[c.end : c.end + 2] == "\n\n"
+
+
+def test_long_paragraph_is_split_at_spaces():
+    text = " ".join(f"w{i:03d}" for i in range(100))  # 499 chars, one paragraph
+    chunks = chunk_paragraphs("d", text, [0], max_size=50)
+    assert all(len(c.text) <= 50 for c in chunks)
+    assert all(not c.text.startswith(" ") and not c.text.endswith(" ") for c in chunks)
+    assert " ".join(c.text for c in chunks) == text  # no word cut in half, none lost
+
+
+def test_split_long_hard_cuts_a_giant_word():
+    text = "x" * 25
+    assert list(_split_long(text, 0, 25, 10)) == [(0, 10), (10, 20), (20, 25)]
+
+
+def test_paragraph_chunks_have_correct_pages():
+    text = "Page one text.\n\nPage two text."
+    chunks = chunk_paragraphs("d", text, [0, 16], max_size=14)
+    assert [(c.text, c.page, c.page_end) for c in chunks] == [
+        ("Page one text.", 1, 1),
+        ("Page two text.", 2, 2),
+    ]
+
+
+def test_blank_text_has_no_paragraph_chunks():
+    assert chunk_paragraphs("d", "\n\n  \n\n", [0]) == []
+
+
+def test_invalid_max_size_raises():
+    with pytest.raises(ValueError):
+        chunk_paragraphs("d", "text", [0], max_size=0)
+
+
+def _random_paragraph_doc(rng: random.Random) -> tuple[str, list[int]]:
+    words = ["retrieval", "dense", "a", "the", "BM25", "x" * rng.randint(1, 80), "agent"]
+    paragraphs = [
+        " ".join(rng.choices(words, k=rng.randint(1, 120))) for _ in range(rng.randint(1, 40))
+    ]
+    text = "\n\n".join(paragraphs)
+    starts = [0] + [m.end() for m in re.finditer("\n\n", text)]
+    offsets = sorted(rng.sample(starts, min(len(starts), rng.randint(1, 8))) + [0])
+    return text, sorted(set(offsets))
+
+
+@pytest.mark.parametrize("seed", range(50))
+def test_paragraph_invariants_on_random_documents(seed):
+    rng = random.Random(seed)
+    text, offsets = _random_paragraph_doc(rng)
+    max_size = rng.randint(20, 1_500)
+
+    chunks = chunk_paragraphs("doc", text, offsets, max_size=max_size)
+
+    assert all(text[c.start : c.end] == c.text for c in chunks)
+    assert all(0 < len(c.text) <= max_size for c in chunks)
+    # in order and never overlapping
+    assert all(a.end <= b.start for a, b in zip(chunks, chunks[1:], strict=False))
+    # coverage: every visible character of the document is inside some chunk
+    covered = set()
+    for c in chunks:
+        covered.update(range(c.start, c.end))
+    missing = [i for i, ch in enumerate(text) if not ch.isspace() and i not in covered]
+    assert missing == []
+    # what's left between chunks is only whitespace
+    gaps = [text[a.end : b.start] for a, b in zip(chunks, chunks[1:], strict=False)]
+    assert all(not g.strip() for g in gaps)
+
+
+# --------------------------------------------------------------------------- #
+# Corpus level + CLI
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def processed(tmp_path):
+    """A tiny processed/ folder, built by the real ingestion code."""
+    from ragbench.pipeline.ingest import ingest_dir
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "a.txt").write_text("Heading A\n\n" + "Alpha text. " * 50)
+    (raw / "b.txt").write_text("Heading B\n\n" + "Beta text. " * 10)
+    ingest_dir(raw, tmp_path / "processed")
+    return tmp_path / "processed"
+
+
+@pytest.mark.parametrize("method", ["fixed", "paragraph"])
+def test_chunk_corpus_covers_every_document(processed, method):
+    chunks = chunk_corpus(processed, method=method, size=200, overlap=50)
+    assert len({c.doc_id for c in chunks}) == 2
+    assert all(len(c.text) <= 200 for c in chunks)
+
+
+def test_chunk_corpus_requires_ingestion_first(tmp_path):
+    with pytest.raises(FileNotFoundError, match="ragbench-ingest"):
+        chunk_corpus(tmp_path)
+
+
+def test_unknown_method_raises(processed):
+    with pytest.raises(ValueError, match="method"):
+        chunk_corpus(processed, method="semantic")
+
+
+def test_output_name_encodes_all_settings():
+    assert output_name("paragraph", 1000, 200) == "chunks.paragraph.1000"
+    assert output_name("fixed", 1000, 200) == "chunks.fixed.1000-200"
+    assert output_name("fixed", 1000, 100) != output_name("fixed", 1000, 200)
+
+
+def test_cli_writes_readable_jsonl_and_prints_stats(processed, capsys):
+    assert main([str(processed), "--method", "paragraph", "--size", "300"]) == 0
+    out_file = processed / "chunks.paragraph.300.jsonl"
+    chunks = read_chunks(out_file)
+    assert chunks and all(len(c.text) <= 300 for c in chunks)
+    printed = capsys.readouterr().out
+    assert "chunks" in printed and "max_chars" in printed
+
+
+def test_cli_reports_missing_manifest(tmp_path, capsys):
+    assert main([str(tmp_path)]) == 1
+    assert "ragbench-ingest" in capsys.readouterr().err
+
+
+def test_stats():
+    chunks = chunk_paragraphs("d", "aa\n\nbbbb", [0], max_size=4)
+    assert stats(chunks) == {
+        "chunks": 2,
+        "documents": 1,
+        "per_document": 2.0,
+        "mean_chars": 3,
+        "median_chars": 3,
+        "min_chars": 2,
+        "max_chars": 4,
+    }
