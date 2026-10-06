@@ -126,22 +126,68 @@ def _last_space_before(text: str, start: int, limit: int) -> int | None:
     return cut if cut > start else None
 
 
+def _best_split(
+    text: str, start: int, end: int, min_size: int, max_size: int
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    """Split text[start:end] into two spans, each between min_size and max_size long.
+
+    Prefers a paragraph break, then a space, closest to the middle; a hard cut in the
+    middle is the last resort (one giant "word").
+    """
+    middle = (start + end) // 2
+    for separator in ("\n\n", " "):
+        options = []
+        pos = text.find(separator, start + 1, end)
+        while pos != -1:
+            left_end = len(text[start:pos].rstrip()) + start
+            right_start = pos + len(text[pos:end]) - len(text[pos:end].lstrip())
+            if (
+                min_size <= left_end - start <= max_size
+                and min_size <= end - right_start <= max_size
+            ):
+                options.append((abs(pos - middle), left_end, right_start))
+            pos = text.find(separator, pos + 1, end)
+        if options:
+            _, left_end, right_start = min(options)
+            return (start, left_end), (right_start, end)
+    return (start, middle), (middle, end)
+
+
+def _belongs_with_previous(chunk_text: str) -> bool:
+    """A leftover starting in lowercase or with punctuation continues the text before it
+    ("al., 2020).", "our filtering scheme..."); a heading or caption starts what follows."""
+    first = chunk_text.lstrip()[:1]
+    return not (first.isupper() or first.isdigit())
+
+
 def _merge_small(
-    spans: list[tuple[int, int]], min_size: int, max_size: int
+    text: str, spans: list[tuple[int, int]], min_size: int, max_size: int
 ) -> list[tuple[int, int]]:
-    """Merge spans shorter than `min_size` into a neighbour, if the result still fits."""
+    """Get rid of spans shorter than `min_size`.
+
+    A small span is merged into a neighbour if the result fits. If neither neighbour has
+    room, it is joined with the neighbour it belongs with (previous for a continuation,
+    next for a heading) and the pair is re-split into two balanced chunks.
+    """
     out = list(spans)
     i = 0
     while i < len(out):
         start, end = out[i]
-        if end - start < min_size and len(out) > 1:
-            if i > 0 and end - out[i - 1][0] <= max_size:
-                out[i - 1 : i + 1] = [(out[i - 1][0], end)]
-                continue  # the merged span is checked again at index i (now the next span)
-            if i + 1 < len(out) and out[i + 1][1] - start <= max_size:
-                out[i : i + 2] = [(start, out[i + 1][1])]
-                continue  # re-check the merged span, it may still be small
-        i += 1
+        if end - start >= min_size or len(out) == 1:
+            i += 1
+            continue
+        if i > 0 and end - out[i - 1][0] <= max_size:
+            out[i - 1 : i + 1] = [(out[i - 1][0], end)]
+            continue
+        if i + 1 < len(out) and out[i + 1][1] - start <= max_size:
+            out[i : i + 2] = [(start, out[i + 1][1])]
+            continue
+        # no room anywhere: rebalance with the neighbour this text belongs to
+        use_previous = i > 0 and (i + 1 == len(out) or _belongs_with_previous(text[start:end]))
+        j = i - 1 if use_previous else i
+        left, right = _best_split(text, out[j][0], out[j + 1][1], min_size, max_size)
+        out[j : j + 2] = [left, right]
+        i = j + 2
     return out
 
 
@@ -156,12 +202,13 @@ def chunk_paragraphs(
 
     * A paragraph that fits is added to the current chunk; one that doesn't fit starts
       a new chunk, so chunks normally begin and end at paragraph boundaries.
-    * A paragraph longer than `max_size` on its own must be split anyway, so its first
-      part fills the rest of the current chunk (cut at a space) and the remainder is
-      cut into `max_size` pieces at spaces.
+    * A paragraph longer than `max_size` on its own is cut into `max_size` pieces at
+      spaces. Only if the current chunk is still tiny (a lone heading) is it topped up
+      with the paragraph's first words; otherwise the long paragraph starts fresh, so
+      the chunk before it still ends at a paragraph boundary.
     * Leftovers shorter than `min_size` (default: 10% of `max_size`), e.g. the tail of
-      a paragraph that continues on the next page, are merged into a neighbour when the
-      result still fits.
+      a paragraph that continues on the next page, are merged into a neighbour, or
+      rebalanced with it when neither neighbour has room (see `_merge_small`).
 
     Chunks don't overlap; only whitespace between them is left out.
     """
@@ -180,8 +227,9 @@ def chunk_paragraphs(
         if spans and end - spans[-1][0] <= max_size:
             spans[-1] = (spans[-1][0], end)  # the whole paragraph fits: extend
             continue
-        if end - start > max_size and spans:
-            # too long to ever fit whole: top up the current chunk with its first words
+        if end - start > max_size and spans and spans[-1][1] - spans[-1][0] < min_size:
+            # too long to ever fit whole, and the current chunk is a lone heading:
+            # top it up with the paragraph's first words instead of stranding it
             room_end = spans[-1][0] + max_size
             cut = _last_space_before(text, start, room_end)
             if cut is not None and cut - start >= min_size:
@@ -189,7 +237,7 @@ def chunk_paragraphs(
                 start = cut + 1
         spans.extend(_split_long(text, start, end, max_size))
 
-    spans = _merge_small(spans, min_size, max_size)
+    spans = _merge_small(text, spans, min_size, max_size)
     return [_make_chunk(doc_id, i, text, a, b, page_offsets) for i, (a, b) in enumerate(spans)]
 
 

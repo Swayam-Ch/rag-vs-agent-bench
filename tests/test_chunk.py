@@ -6,6 +6,8 @@ import pytest
 
 from ragbench.pipeline.chunk import (
     Chunk,
+    _belongs_with_previous,
+    _best_split,
     _split_long,
     chunk_corpus,
     chunk_fixed,
@@ -302,10 +304,58 @@ def test_small_leftover_is_merged_into_a_neighbour():
     assert [c.text for c in chunks] == ["A" * 50 + "\n\ntail.", "B" * 90]
 
 
-def test_small_chunk_kept_when_no_neighbour_has_room():
-    text = "A" * 99 + "\n\n" + "tail." + "\n\n" + "B" * 99
+def _words(n: int, prefix: str) -> str:
+    return " ".join(f"{prefix}{i}" for i in range(n))
+
+
+def test_continuation_tail_is_rebalanced_with_the_previous_chunk():
+    # "al., 2020)." after a page break; both neighbours are nearly full
+    before, after = _words(40, "a")[:95] + ".", "B" + _words(40, "b")[:94] + "."
+    assert len(before) == len(after) == 96  # neither neighbour has room for 11 more chars
+    text = f"{before}\n\nal., 2020).\n\n{after}"
     chunks = chunk_paragraphs("d", text, [0], max_size=100, min_size=20)
-    assert [len(c.text) for c in chunks] == [99, 5, 99]
+    assert all(20 <= len(c.text) <= 100 for c in chunks)
+    assert "al., 2020)." in chunks[1].text  # joined the text it continues
+    assert chunks[-1].text == after  # the following chunk is untouched
+
+
+def test_heading_is_rebalanced_with_the_next_chunk():
+    before, after = "A" + _words(40, "a")[:94] + ".", "B" + _words(40, "b")[:94] + "."
+    assert len(before) == len(after) == 96
+    text = f"{before}\n\n6.1 Long Context\n\n{after}"
+    chunks = chunk_paragraphs("d", text, [0], max_size=100, min_size=20)
+    assert all(20 <= len(c.text) <= 100 for c in chunks)
+    assert chunks[0].text == before  # the previous chunk is untouched
+    assert chunks[1].text.startswith("6.1 Long Context\n\nB")  # heading leads its section
+
+
+def test_rebalance_prefers_a_paragraph_break_near_the_middle():
+    text = "P" * 40 + "\n\n" + "Q" * 40 + "\n\n" + "R" * 40
+    left, right = _best_split(text, 0, len(text), min_size=10, max_size=100)
+    assert (
+        text[left[0] : left[1]] == "P" * 40 + "\n\n" + "Q" * 40
+        or text[right[0] : right[1]] == "Q" * 40 + "\n\n" + "R" * 40
+    )
+    assert text[left[1] : right[0]].strip() == ""  # cut only at whitespace
+
+
+def test_rebalance_hard_cut_is_the_last_resort():
+    left, right = _best_split("x" * 150, 0, 150, min_size=10, max_size=100)
+    assert (left, right) == ((0, 75), (75, 150))
+
+
+@pytest.mark.parametrize(
+    ("leftover", "with_previous"),
+    [
+        ("al., 2020).", True),
+        ("our filtering scheme", True),
+        ("(see Table 2)", True),
+        ("6.1 Long-Context Models", False),
+        ("Table 23: Few-shot", False),
+    ],
+)
+def test_which_neighbour_a_leftover_belongs_with(leftover, with_previous):
+    assert _belongs_with_previous(leftover) is with_previous
 
 
 def test_explicit_min_size_above_max_raises():
@@ -314,17 +364,14 @@ def test_explicit_min_size_above_max_raises():
 
 
 @pytest.mark.parametrize("seed", range(50))
-def test_small_chunks_only_when_unavoidable(seed):
+def test_no_chunk_is_smaller_than_the_minimum(seed):
     rng = random.Random(seed)
     text, offsets = _random_paragraph_doc(rng)
     max_size = rng.randint(50, 1_500)
-    min_size = max_size // 10
     chunks = chunk_paragraphs("doc", text, offsets, max_size=max_size)
-    for i, c in enumerate(chunks):
-        if len(c.text) < min_size and len(chunks) > 1:
-            fits_prev = i > 0 and c.end - chunks[i - 1].start <= max_size
-            fits_next = i + 1 < len(chunks) and chunks[i + 1].end - c.start <= max_size
-            assert not fits_prev and not fits_next
+    if len(chunks) > 1:
+        assert all(len(c.text) >= max_size // 10 for c in chunks)
+    assert all(len(c.text) <= max_size for c in chunks)
 
 
 def test_output_name_records_a_custom_min_size():
