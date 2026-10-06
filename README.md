@@ -27,6 +27,8 @@ pytest
 ragbench-fetch data/sources.txt data/raw -v
 ragbench-fetch data/sources.txt data/raw --verify   # prove you have the exact same PDFs
 ragbench-ingest data/raw data/processed -v
+ragbench-chunk data/processed                       # -> data/processed/chunks.paragraph.1000.jsonl
+ragbench-chunk data/processed --method fixed        # -> chunks.fixed.1000-200.jsonl
 ```
 
 ## Methodology notes
@@ -50,7 +52,7 @@ src/ragbench/
   pipeline/checksums.py  # record / verify file hashes                                   ✅
   pipeline/metadata.py   # arXiv API client + metadata snapshot                          ✅
   pipeline/ingest.py     # PDF/txt/md -> clean markdown + manifest                       ✅
-  pipeline/chunk.py      # fixed-size chunks with overlap, page-aware        (paragraphs ⏳) ✅
+  pipeline/chunk.py      # fixed windows or whole paragraphs, page-aware                 ✅
   search/                # vector, hybrid, agent backends                                ⏳
 eval/                    # questions.yaml + run_eval.py                                  ⏳
 results/                 # committed run outputs                                         ⏳

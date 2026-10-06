@@ -24,6 +24,7 @@ dev = [
 ]
 
 [project.scripts]
+ragbench-chunk = "ragbench.pipeline.chunk:main"
 ragbench-fetch = "ragbench.pipeline.fetch:main"
 ragbench-ingest = "ragbench.pipeline.ingest:main"
 
