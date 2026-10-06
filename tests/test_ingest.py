@@ -9,6 +9,7 @@ from ragbench.pipeline.ingest import (
     ingest_dir,
     ingest_file,
     main,
+    mark_paragraph_breaks,
     normalize_text,
     remove_repeated_lines,
     strip_references,
@@ -340,3 +341,72 @@ def test_ingest_records_boilerplate_count(tmp_path):
     doc = ingest_file(pdf)
     assert doc.boilerplate_lines_removed == 3
     assert "Header Line" not in doc.text
+
+
+# --------------------------------------------------------------------------- #
+# mark_paragraph_breaks (PDF lines -> paragraphs)
+# --------------------------------------------------------------------------- #
+
+FULL = "x" * 70  # a full-width line of body text
+
+
+def _page(*lines: str) -> str:
+    return "\n".join(lines)
+
+
+def test_short_line_ending_a_sentence_ends_the_paragraph():
+    page = _page(FULL, FULL, "End of the first paragraph.", "Second paragraph starts here", FULL)
+    assert mark_paragraph_breaks(page) == _page(
+        FULL, FULL, "End of the first paragraph.", "", "Second paragraph starts here", FULL
+    )
+
+
+def test_sentence_ending_at_the_margin_is_not_a_break():
+    full_sentence = "y" * 68 + "."
+    page = _page(FULL, full_sentence, "The paragraph goes on here", FULL, FULL)
+    assert mark_paragraph_breaks(page) == page
+
+
+def test_short_line_without_sentence_end_is_not_a_break():
+    page = _page(FULL, FULL, "a short wrapped fragment", "Continues with a capital", FULL)
+    assert mark_paragraph_breaks(page) == page
+
+
+def test_next_line_in_lowercase_is_not_a_break():
+    page = _page(FULL, FULL, "e.g. the model.", "continues the sentence", FULL)
+    assert mark_paragraph_breaks(page) == page
+
+
+@pytest.mark.parametrize("heading", ["3 Method", "3.2 Training Details", "Abstract", "Conclusion"])
+def test_headings_are_their_own_paragraph(heading):
+    page = _page(FULL, FULL, heading, FULL, FULL)
+    assert mark_paragraph_breaks(page) == _page(FULL, FULL, "", heading, "", FULL, FULL)
+
+
+def test_too_few_lines_are_left_alone():
+    page = _page("Short.", "Another")
+    assert mark_paragraph_breaks(page) == page
+
+
+def test_normalize_text_keeps_detected_paragraphs():
+    page = _page(FULL, "the first paragraph ends.", "Second one", FULL, FULL)
+    assert normalize_text(page) == f"{FULL} the first paragraph ends.\n\nSecond one {FULL} {FULL}"
+
+
+def test_typeset_pdf_paragraphs_survive_ingestion(tmp_path):
+    """Paragraphs laid out by a real typesetter (justified, wrapped by reportlab)."""
+    styles = pytest.importorskip("reportlab.lib.styles")
+    platypus = pytest.importorskip("reportlab.platypus")
+    words = "retrieval dense passage model query document results method recall baseline"
+    paragraphs = [
+        " ".join(f"{w}{i}{j}" for j, w in enumerate(words.split() * 6)).capitalize() + "."
+        for i in range(5)
+    ]
+    style = styles.getSampleStyleSheet()["BodyText"]
+    style.alignment = 4  # justified, like a paper
+    pdf = tmp_path / "typeset.pdf"
+    platypus.SimpleDocTemplate(str(pdf)).build([platypus.Paragraph(p, style) for p in paragraphs])
+
+    doc = ingest_file(pdf)
+
+    assert [p for p in doc.text.split("\n\n") if p.strip()] == paragraphs

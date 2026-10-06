@@ -279,3 +279,59 @@ def test_stats():
         "min_chars": 2,
         "max_chars": 4,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Filling and small-leftover merging (#34)
+# --------------------------------------------------------------------------- #
+
+
+def test_long_paragraph_fills_the_current_chunk_first():
+    heading = "2 Method"
+    long_para = " ".join(f"word{i:02d}" for i in range(30))  # 209 chars
+    text = f"{heading}\n\n{long_para}"
+    chunks = chunk_paragraphs("d", text, [0], max_size=100, min_size=10)
+    assert chunks[0].text.startswith(heading + "\n\nword00")  # heading isn't stranded
+    assert all(len(c.text) <= 100 for c in chunks)
+
+
+def test_small_leftover_is_merged_into_a_neighbour():
+    # the tail of a paragraph that continued onto the next page
+    text = "A" * 50 + "\n\n" + "tail." + "\n\n" + "B" * 90
+    chunks = chunk_paragraphs("d", text, [0], max_size=100, min_size=20)
+    assert [c.text for c in chunks] == ["A" * 50 + "\n\ntail.", "B" * 90]
+
+
+def test_small_chunk_kept_when_no_neighbour_has_room():
+    text = "A" * 99 + "\n\n" + "tail." + "\n\n" + "B" * 99
+    chunks = chunk_paragraphs("d", text, [0], max_size=100, min_size=20)
+    assert [len(c.text) for c in chunks] == [99, 5, 99]
+
+
+def test_explicit_min_size_above_max_raises():
+    with pytest.raises(ValueError, match="min_size"):
+        chunk_paragraphs("d", "text", [0], max_size=100, min_size=200)
+
+
+@pytest.mark.parametrize("seed", range(50))
+def test_small_chunks_only_when_unavoidable(seed):
+    rng = random.Random(seed)
+    text, offsets = _random_paragraph_doc(rng)
+    max_size = rng.randint(50, 1_500)
+    min_size = max_size // 10
+    chunks = chunk_paragraphs("doc", text, offsets, max_size=max_size)
+    for i, c in enumerate(chunks):
+        if len(c.text) < min_size and len(chunks) > 1:
+            fits_prev = i > 0 and c.end - chunks[i - 1].start <= max_size
+            fits_next = i + 1 < len(chunks) and chunks[i + 1].end - c.start <= max_size
+            assert not fits_prev and not fits_next
+
+
+def test_output_name_records_a_custom_min_size():
+    assert output_name("paragraph", 1000, 200, None) == "chunks.paragraph.1000"
+    assert output_name("paragraph", 1000, 200, 50) == "chunks.paragraph.1000-min50"
+
+
+def test_cli_min_size_option(processed):
+    assert main([str(processed), "--size", "300", "--min-size", "10"]) == 0
+    assert (processed / "chunks.paragraph.300-min10.jsonl").exists()
