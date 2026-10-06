@@ -81,14 +81,66 @@ class Document:
 # --------------------------------------------------------------------------- #
 
 
+MIN_LINES_FOR_LAYOUT = 5  # too few lines to estimate a line width: trust blank lines only
+SHORT_LINE = 0.85  # a line below 85% of the page's normal width counts as "short"
+_SENTENCE_END = re.compile(r"[.:?!][\"')\]]*$")
+_STARTS_BLOCK = re.compile(r"^[A-Z0-9\u2022\u25cf\u2013\u2014\-*(\[]")
+_HEADING = re.compile(
+    r"^(?:\d+(?:\.\d+)*\.?\s+[A-Z][^.]{1,80}"  # "3 Method", "3.2. Training details"
+    r"|abstract|introduction|related work|background|conclusions?|discussion"
+    r"|limitations|acknowledg(?:e)?ments?|broader impact)$",
+    re.IGNORECASE,
+)
+
+
+def _typical_width(lines: list[str]) -> float:
+    """The page's normal line length: the 80th percentile, so short lines and a few
+    over-long ones (URLs, equations) don't distort it."""
+    lengths = sorted(len(line) for line in lines)
+    return lengths[int(0.8 * (len(lengths) - 1))]
+
+
+def mark_paragraph_breaks(text: str) -> str:
+    """Insert a blank line wherever the line layout says a new paragraph starts.
+
+    PDF extractors end every line with a single newline and rarely leave blank lines
+    between paragraphs, so without this a whole page becomes one paragraph. A break is
+    added between two lines when:
+
+    * either line looks like a section heading ("3 Method", "Abstract"), or
+    * the first line is clearly shorter than the page's normal width and ends a
+      sentence, and the next line starts like a new block (capital, digit, bullet).
+
+    A full-width line ending in "." is *not* a break: that is just a sentence that
+    happens to end at the margin, with the paragraph continuing on the next line.
+    """
+    lines = text.split("\n")
+    filled = [line.strip() for line in lines if line.strip()]
+    if len(filled) < MIN_LINES_FOR_LAYOUT:
+        return text
+    short = SHORT_LINE * _typical_width(filled)
+
+    out = [lines[0]]
+    for prev, line in zip(lines, lines[1:], strict=False):
+        a, b = prev.strip(), line.strip()
+        if a and b:
+            heading = bool(_HEADING.match(a) or _HEADING.match(b))
+            ends_paragraph = len(a) < short and _SENTENCE_END.search(a) and _STARTS_BLOCK.match(b)
+            if heading or ends_paragraph:
+                out.append("")
+        out.append(line)
+    return "\n".join(out)
+
+
 def normalize_text(raw: str) -> str:
     """Clean text extracted from PDFs or plain files.
 
     Steps (each one is individually tested):
       1. Unicode NFKC + explicit ligature replacement
       2. Re-join words hyphenated across line breaks ("retrie-\\nval" -> "retrieval")
-      3. Unwrap hard line breaks inside paragraphs
-      4. Collapse runs of spaces and of blank lines
+      3. Mark paragraph breaks from the line layout (see mark_paragraph_breaks)
+      4. Unwrap hard line breaks inside paragraphs
+      5. Collapse runs of spaces and of blank lines
     """
     text = raw.replace("\r\n", "\n").replace("\r", "\n")
     for lig, repl in _LIGATURES.items():
@@ -98,10 +150,13 @@ def normalize_text(raw: str) -> str:
     # 2. de-hyphenate: a lowercase letter, hyphen, newline, lowercase letter
     text = re.sub(r"([a-z])-\n([a-z])", r"\1\2", text)
 
-    # 3. a single newline between two non-empty lines is a soft wrap -> space
+    # 3. blank lines where the layout shows a paragraph ends
+    text = mark_paragraph_breaks(text)
+
+    # 4. a single newline between two non-empty lines is a soft wrap -> space
     text = re.sub(r"(?<=\S)[ \t]*\n(?=[ \t]*\S)", " ", text)
 
-    # 4. tidy whitespace
+    # 5. tidy whitespace
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)

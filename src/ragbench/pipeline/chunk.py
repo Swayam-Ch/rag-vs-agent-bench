@@ -30,6 +30,7 @@ from pathlib import Path
 
 DEFAULT_SIZE = 1000  # characters, roughly 200-250 English words
 DEFAULT_OVERLAP = 200  # characters shared between neighbouring chunks
+MIN_SIZE_SHARE = 0.1  # paragraph chunks below 10% of the limit are merged into a neighbour
 
 
 @dataclass(frozen=True)
@@ -119,33 +120,76 @@ def _split_long(text: str, start: int, end: int, max_size: int) -> Iterator[tupl
         yield start, end
 
 
+def _last_space_before(text: str, start: int, limit: int) -> int | None:
+    """Index of the last space in text[start+1 : limit+1], or None."""
+    cut = text.rfind(" ", start + 1, limit + 1)
+    return cut if cut > start else None
+
+
+def _merge_small(
+    spans: list[tuple[int, int]], min_size: int, max_size: int
+) -> list[tuple[int, int]]:
+    """Merge spans shorter than `min_size` into a neighbour, if the result still fits."""
+    out = list(spans)
+    i = 0
+    while i < len(out):
+        start, end = out[i]
+        if end - start < min_size and len(out) > 1:
+            if i > 0 and end - out[i - 1][0] <= max_size:
+                out[i - 1 : i + 1] = [(out[i - 1][0], end)]
+                continue  # the merged span is checked again at index i (now the next span)
+            if i + 1 < len(out) and out[i + 1][1] - start <= max_size:
+                out[i : i + 2] = [(start, out[i + 1][1])]
+                continue  # re-check the merged span, it may still be small
+        i += 1
+    return out
+
+
 def chunk_paragraphs(
     doc_id: str,
     text: str,
     page_offsets: list[int],
     max_size: int = DEFAULT_SIZE,
+    min_size: int | None = None,
 ) -> list[Chunk]:
     """Pack whole paragraphs into chunks of at most `max_size` characters.
 
-    Paragraphs are added to the current chunk until the next one would not fit. A
-    paragraph longer than `max_size` on its own is split at word boundaries. Chunks
-    don't overlap; the blank lines between chunks are the only characters not covered.
+    * A paragraph that fits is added to the current chunk; one that doesn't fit starts
+      a new chunk, so chunks normally begin and end at paragraph boundaries.
+    * A paragraph longer than `max_size` on its own must be split anyway, so its first
+      part fills the rest of the current chunk (cut at a space) and the remainder is
+      cut into `max_size` pieces at spaces.
+    * Leftovers shorter than `min_size` (default: 10% of `max_size`), e.g. the tail of
+      a paragraph that continues on the next page, are merged into a neighbour when the
+      result still fits.
+
+    Chunks don't overlap; only whitespace between them is left out.
     """
     if max_size <= 0:
         raise ValueError(f"max_size must be positive, got {max_size}")
+    if min_size is None:
+        min_size = int(MIN_SIZE_SHARE * max_size)
+    if not 0 <= min_size <= max_size:
+        raise ValueError(f"min_size must be in [0, max_size], got {min_size}")
 
-    pieces: list[tuple[int, int]] = []
+    spans: list[tuple[int, int]] = []
     for m in _PARAGRAPH.finditer(text):
         start = m.start() + (len(m.group()) - len(m.group().lstrip()))
         end = m.start() + len(m.group().rstrip())
-        pieces.extend(_split_long(text, start, end, max_size))
 
-    spans: list[tuple[int, int]] = []
-    for start, end in pieces:
         if spans and end - spans[-1][0] <= max_size:
-            spans[-1] = (spans[-1][0], end)  # extend the current chunk with this paragraph
-        else:
-            spans.append((start, end))
+            spans[-1] = (spans[-1][0], end)  # the whole paragraph fits: extend
+            continue
+        if end - start > max_size and spans:
+            # too long to ever fit whole: top up the current chunk with its first words
+            room_end = spans[-1][0] + max_size
+            cut = _last_space_before(text, start, room_end)
+            if cut is not None and cut - start >= min_size:
+                spans[-1] = (spans[-1][0], cut)
+                start = cut + 1
+        spans.extend(_split_long(text, start, end, max_size))
+
+    spans = _merge_small(spans, min_size, max_size)
     return [_make_chunk(doc_id, i, text, a, b, page_offsets) for i, (a, b) in enumerate(spans)]
 
 
@@ -157,7 +201,11 @@ METHODS = ("fixed", "paragraph")
 
 
 def chunk_corpus(
-    processed_dir: Path, method: str = "paragraph", size: int = DEFAULT_SIZE, overlap: int = 0
+    processed_dir: Path,
+    method: str = "paragraph",
+    size: int = DEFAULT_SIZE,
+    overlap: int = 0,
+    min_size: int | None = None,
 ) -> list[Chunk]:
     """Chunk every document listed in `processed_dir/manifest.jsonl`."""
     if method not in METHODS:
@@ -174,16 +222,18 @@ def chunk_corpus(
         if method == "fixed":
             chunks += chunk_fixed(entry["doc_id"], text, entry["page_offsets"], size, overlap)
         else:
-            chunks += chunk_paragraphs(entry["doc_id"], text, entry["page_offsets"], size)
+            chunks += chunk_paragraphs(entry["doc_id"], text, entry["page_offsets"], size, min_size)
     return chunks
 
 
-def output_name(method: str, size: int, overlap: int) -> str:
+def output_name(method: str, size: int, overlap: int, min_size: int | None = None) -> str:
     """File name that encodes every setting, so different runs never overwrite each other.
 
     "chunks.paragraph.1000", "chunks.fixed.1000-200"
     """
-    return f"chunks.{method}.{size}" + (f"-{overlap}" if method == "fixed" else "")
+    if method == "fixed":
+        return f"chunks.fixed.{size}-{overlap}"
+    return f"chunks.paragraph.{size}" + (f"-min{min_size}" if min_size is not None else "")
 
 
 def write_chunks(path: Path, chunks: list[Chunk]) -> None:
@@ -216,6 +266,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--method", choices=METHODS, default="paragraph")
     parser.add_argument("--size", type=int, default=DEFAULT_SIZE, help="max characters per chunk")
     parser.add_argument(
+        "--min-size",
+        type=int,
+        help="paragraph method: merge smaller chunks into a neighbour (default: 10%% of --size)",
+    )
+    parser.add_argument(
         "--overlap",
         type=int,
         default=DEFAULT_OVERLAP,
@@ -226,9 +281,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    out = args.out or args.processed / f"{output_name(args.method, args.size, args.overlap)}.jsonl"
+    name = output_name(args.method, args.size, args.overlap, args.min_size)
+    out = args.out or args.processed / f"{name}.jsonl"
     try:
-        chunks = chunk_corpus(args.processed, args.method, args.size, args.overlap)
+        chunks = chunk_corpus(args.processed, args.method, args.size, args.overlap, args.min_size)
     except (FileNotFoundError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
