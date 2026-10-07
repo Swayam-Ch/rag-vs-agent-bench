@@ -40,6 +40,7 @@ ragbench-chunk data/processed --method fixed        # -> chunks.fixed.1000-200.j
 - **Page offsets are recorded** so answers can be checked against the page they cite.
 - **Pinned inputs.** `data/checksums.sha256` records the SHA-256 of every PDF. Any run on different bytes fails loudly instead of silently producing different numbers.
 - **Metadata is a committed snapshot.** Titles, authors, dates and categories come from the arXiv API once, at download time, and live in `data/metadata.jsonl`. Ingestion never touches the network.
+- **One contract for every method.** Each search backend returns results that point into the documents by position (document, character range, pages), and passes the same contract tests: best first, deterministic ties, no duplicates, results that match the source text. The agent reports the ranges it read, so it can be scored with the same metrics as the chunk-based methods.
 - **Deterministic IDs.** A document's ID is a hash of its bytes, so reruns line up.
 
 ## Layout
@@ -54,7 +55,8 @@ src/ragbench/
   pipeline/metadata.py   # arXiv API client + metadata snapshot                          ✅
   pipeline/ingest.py     # PDF/txt/md -> clean markdown + manifest                       ✅
   pipeline/chunk.py      # fixed windows or whole paragraphs, page-aware                 ✅
-  search/                # vector, hybrid, agent backends                                ⏳
+  search/base.py         # SearchResult, Searcher contract, keyword baseline             ✅
+  search/                # BM25, vector, hybrid, agent backends                          ⏳
 eval/                    # questions.yaml + run_eval.py                                  ⏳
 results/                 # committed run outputs                                         ⏳
 tests/
