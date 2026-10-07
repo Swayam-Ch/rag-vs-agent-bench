@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "rank_bm25>=0.2.2",  # reference implementation, only used to cross-check our BM25
     "ruff>=0.5",
     "reportlab>=4",  # only used to build tiny PDFs inside tests
 ]

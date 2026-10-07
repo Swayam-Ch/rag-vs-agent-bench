@@ -18,6 +18,7 @@ from ragbench.search.base import (
     tokenize,
     top_k,
 )
+from ragbench.search.bm25 import BM25Searcher
 
 DOCS = {
     "attention": "The Transformer relies entirely on attention.\n\n"
@@ -43,6 +44,7 @@ def chunks() -> list[Chunk]:
 
 SEARCHERS: list[Callable[[list[Chunk]], Searcher]] = [
     KeywordSearcher,
+    BM25Searcher,
 ]
 
 
