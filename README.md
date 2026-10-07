@@ -56,7 +56,8 @@ src/ragbench/
   pipeline/ingest.py     # PDF/txt/md -> clean markdown + manifest                       ✅
   pipeline/chunk.py      # fixed windows or whole paragraphs, page-aware                 ✅
   search/base.py         # SearchResult, Searcher contract, keyword baseline             ✅
-  search/                # BM25, vector, hybrid, agent backends                          ⏳
+  search/bm25.py         # BM25 from scratch, cross-checked against rank_bm25            ✅
+  search/                # vector, hybrid, agent backends                                ⏳
 eval/                    # questions.yaml + run_eval.py                                  ⏳
 results/                 # committed run outputs                                         ⏳
 tests/
