@@ -12,11 +12,15 @@ license = { text = "MIT" }
 authors = [{ name = "Swayam Chadha" }]
 dependencies = [
     "fonttools>=4.40",  # lets pypdf decode math fonts (e.g. CMMI10) correctly
+    "numpy>=1.26",
     "pypdf>=3.17",
     "requests>=2.31",
 ]
 
 [project.optional-dependencies]
+vector = [
+    "sentence-transformers>=3",  # local embedding models; pulls in PyTorch (large)
+]
 dev = [
     "pytest>=8",
     "rank_bm25>=0.2.2",  # reference implementation, only used to cross-check our BM25
