@@ -153,3 +153,35 @@ def test_real_model_matches_meaning_not_words():
     # no word in common with the right answer except "and"
     [best] = searcher.search("embedding queries and documents for semantic search", k=1)
     assert best.doc_id == "d1"
+
+
+# --------------------------------------------------------------------------- #
+# Model version pinning
+# --------------------------------------------------------------------------- #
+
+
+def test_model_revision_is_pinned_and_part_of_the_fingerprint(monkeypatch):
+    import sys
+    import types
+
+    from ragbench.search import vector_search
+
+    calls = []
+
+    class FakeSentenceTransformer:
+        def __init__(self, name, revision=None):
+            calls.append((name, revision))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        types.SimpleNamespace(SentenceTransformer=FakeSentenceTransformer),
+    )
+
+    pinned = vector_search.SentenceTransformerEmbedder()
+    other = vector_search.SentenceTransformerEmbedder(revision="abc123")
+
+    assert calls[0] == (vector_search.DEFAULT_MODEL, vector_search.DEFAULT_REVISION)
+    assert len(vector_search.DEFAULT_REVISION) == 40  # a full commit hash, not "main"
+    assert pinned.name.endswith("@" + vector_search.DEFAULT_REVISION)
+    assert fingerprint(pinned.name, CHUNKS) != fingerprint(other.name, CHUNKS)

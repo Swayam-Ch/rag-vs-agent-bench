@@ -33,6 +33,10 @@ from ragbench.search.base import SearchResult, check_k, top_k
 log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # small (80 MB), fast on a CPU
+# The exact model version (a Hugging Face commit). Without it, "the model" is whatever the
+# authors last uploaded, so vectors could change between runs with nothing in the repo
+# showing why. The revision is part of the embedder's name, and so of the cache fingerprint.
+DEFAULT_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 
 
 class Embedder(Protocol):
@@ -50,16 +54,21 @@ class SentenceTransformerEmbedder:
     and silently ignores the rest, which is one reason chunk size matters.
     """
 
-    def __init__(self, model_name: str = DEFAULT_MODEL, batch_size: int = 32):
+    def __init__(
+        self,
+        model_name: str = DEFAULT_MODEL,
+        revision: str = DEFAULT_REVISION,
+        batch_size: int = 32,
+    ):
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:  # pragma: no cover - depends on the environment
             raise ImportError(
                 'vector search needs sentence-transformers: pip install -e ".[vector]"'
             ) from exc
-        self.name = model_name
+        self.name = f"{model_name}@{revision}"
         self.batch_size = batch_size
-        self._model = SentenceTransformer(model_name)
+        self._model = SentenceTransformer(model_name, revision=revision)
 
     def embed(self, texts: list[str]) -> np.ndarray:
         return self._model.encode(
