@@ -8,6 +8,7 @@ import math
 from collections.abc import Callable
 
 import pytest
+from fakes import HashEmbedder
 
 from ragbench.pipeline.chunk import Chunk, chunk_paragraphs
 from ragbench.search.base import (
@@ -19,6 +20,7 @@ from ragbench.search.base import (
     top_k,
 )
 from ragbench.search.bm25 import BM25Searcher
+from ragbench.search.vector_search import VectorSearcher
 
 DOCS = {
     "attention": "The Transformer relies entirely on attention.\n\n"
@@ -42,9 +44,14 @@ def chunks() -> list[Chunk]:
     return out
 
 
+def vector_with_hash_embedder(chunks: list[Chunk]) -> VectorSearcher:
+    return VectorSearcher(chunks, HashEmbedder())
+
+
 SEARCHERS: list[Callable[[list[Chunk]], Searcher]] = [
     KeywordSearcher,
     BM25Searcher,
+    vector_with_hash_embedder,
 ]
 
 

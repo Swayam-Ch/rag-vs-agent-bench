@@ -20,7 +20,7 @@ All three search the *same* ingested text, answer the *same* versioned question 
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev]"            # add ",vector" for vector search (installs PyTorch)
 pytest
 
 # download the corpus defined in data/sources.txt (~1 min, rate-limited), then ingest it
@@ -57,7 +57,8 @@ src/ragbench/
   pipeline/chunk.py      # fixed windows or whole paragraphs, page-aware                 ✅
   search/base.py         # SearchResult, Searcher contract, keyword baseline             ✅
   search/bm25.py         # BM25 from scratch, cross-checked against rank_bm25            ✅
-  search/                # vector, hybrid, agent backends                                ⏳
+  search/vector_search.py # embeddings + cosine similarity, cached on disk               ✅
+  search/                # hybrid, agent backends                                        ⏳
 eval/                    # questions.yaml + run_eval.py                                  ⏳
 results/                 # committed run outputs                                         ⏳
 tests/
