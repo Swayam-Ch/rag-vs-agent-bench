@@ -20,6 +20,7 @@ from ragbench.search.base import (
     top_k,
 )
 from ragbench.search.bm25 import BM25Searcher
+from ragbench.search.hybrid_search import HybridSearcher
 from ragbench.search.vector_search import VectorSearcher
 
 DOCS = {
@@ -48,10 +49,15 @@ def vector_with_hash_embedder(chunks: list[Chunk]) -> VectorSearcher:
     return VectorSearcher(chunks, HashEmbedder())
 
 
+def hybrid_bm25_vector(chunks: list[Chunk]) -> HybridSearcher:
+    return HybridSearcher([BM25Searcher(chunks), vector_with_hash_embedder(chunks)])
+
+
 SEARCHERS: list[Callable[[list[Chunk]], Searcher]] = [
     KeywordSearcher,
     BM25Searcher,
     vector_with_hash_embedder,
+    hybrid_bm25_vector,
 ]
 
 
