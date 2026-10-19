@@ -59,7 +59,8 @@ src/ragbench/
   search/bm25.py         # BM25 from scratch, cross-checked against rank_bm25            ✅
   search/vector_search.py # embeddings + cosine similarity, cached on disk               ✅
   search/hybrid_search.py # reciprocal rank fusion of any searchers (BM25 + vector)     ✅
-  search/                # agent backend                                                 ⏳
+  search/agent_tools.py  # list_files / grep / read_file: safe, bounded, logged          ✅
+  search/agent_search.py # the tool-calling agent loop                                    ⏳
 eval/                    # questions.yaml + run_eval.py                                  ⏳
 results/                 # committed run outputs                                         ⏳
 tests/
