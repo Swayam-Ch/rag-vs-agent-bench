@@ -12,8 +12,11 @@ a language model:
   manifest; a name is never joined onto a file path, so "../../etc/passwd" is just an
   unknown ID.
 
-Every successful `read_file` is logged in `Corpus.reads`. Those ranges are the agent's
-"retrieved evidence", scored with the same page-level metrics as the chunk-based methods.
+Everything the agent is shown is logged in `Corpus.evidence`, in order: each successful
+`read_file` range, and each grep snippet that made it into the (capped) output. That is
+the agent's "retrieved evidence", scored with the same page-level metrics as the
+chunk-based methods. (An agent can answer from snippets alone, without ever calling
+read_file; that is a fair use of its tools and must count.)
 """
 
 from __future__ import annotations
@@ -36,11 +39,12 @@ MAX_COUNTED = 10_000  # stop counting matches here; enough to say "very many"
 
 @dataclass(frozen=True)
 class Read:
-    """A range the agent actually looked at."""
+    """A range of a paper the agent was shown."""
 
     doc_id: str
     start: int
     end: int
+    kind: str = "read"  # "read" (read_file) or "snippet" (shown in grep results)
 
 
 @dataclass
@@ -77,7 +81,8 @@ class Corpus:
         for p in papers:
             if p.arxiv_id:
                 self._aliases[p.arxiv_id] = p.doc_id
-        self.reads: list[Read] = []
+        self.reads: list[Read] = []  # read_file calls only
+        self.evidence: list[Read] = []  # everything shown: reads and grep snippets, in order
 
     @classmethod
     def load(cls, processed_dir: Path) -> Corpus:
@@ -158,7 +163,7 @@ class Corpus:
         max_hits = max(1, min(max_hits, MAX_HITS))
 
         counts: dict[str, int] = {}
-        hits: list[str] = []
+        hits: list[tuple[str, Read]] = []
         total = 0
         for paper in papers:
             for m in regex.finditer(paper.text):
@@ -171,9 +176,8 @@ class Corpus:
                     a = max(0, m.start() - SNIPPET)
                     b = min(len(paper.text), shown_end + SNIPPET)
                     snippet = _one_line(paper.text[a:b])
-                    hits.append(
-                        f"{paper.doc_id} p.{paper.page(m.start())} @{m.start()}: …{snippet}…"
-                    )
+                    line = f"{paper.doc_id} p.{paper.page(m.start())} @{m.start()}: …{snippet}…"
+                    hits.append((line, Read(paper.doc_id, a, b, kind="snippet")))
                 if total >= MAX_COUNTED:
                     break
             if total >= MAX_COUNTED:
@@ -186,8 +190,11 @@ class Corpus:
         for d, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
             lines.append(f"  {d} ({self.papers[d].title[:60]}): {n}")
         lines.append(f"first {len(hits)} matches (read_file around @offset for more):")
-        lines.extend(hits)
-        return _cap("\n".join(lines))
+        lines.extend(line for line, _ in hits)
+        out = _cap("\n".join(lines))
+        # a snippet counts as evidence only if it survived the output cap in full
+        self.evidence.extend(read for line, read in hits if line in out)
+        return out
 
     # ------------------------------------------------------------------ #
     # read_file
@@ -206,6 +213,7 @@ class Corpus:
         length = max(1, min(length, MAX_READ))
         end = min(n, start + length)
         self.reads.append(Read(paper.doc_id, start, end))
+        self.evidence.append(self.reads[-1])
 
         header = (
             f"{paper.doc_id} ({paper.title[:80]}) characters {start}-{end} of {n}, "

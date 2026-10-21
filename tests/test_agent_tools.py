@@ -213,3 +213,40 @@ def test_random_calls_never_raise_and_stay_bounded(seed):
         )
         assert len(out) <= MAX_OUTPUT
     assert len(corpus.list_files()) <= MAX_OUTPUT
+
+
+# --------------------------------------------------------------------------- #
+# Evidence log: reads *and* grep snippets the agent was shown
+# --------------------------------------------------------------------------- #
+
+
+def test_grep_snippets_are_logged_as_evidence(corpus):
+    corpus.grep("number of attention heads")
+    [snippet] = corpus.evidence
+    paper = corpus.papers[snippet.doc_id]
+    assert snippet.kind == "snippet"
+    assert "number of attention heads" in paper.text[snippet.start : snippet.end]
+    assert corpus.reads == []  # still not a read
+
+
+def test_reads_and_snippets_share_one_ordered_log(corpus):
+    doc = _id(corpus, "1706.03762")
+    corpus.read_file(doc, length=10)
+    corpus.grep("question answering")
+    assert [e.kind for e in corpus.evidence] == ["read", "snippet"]
+
+
+def test_failed_or_empty_searches_log_nothing(corpus):
+    corpus.grep("zebra")
+    corpus.grep("  ")
+    corpus.grep("a", doc_id="nope")
+    assert corpus.evidence == []
+
+
+def test_snippets_cut_off_by_the_output_cap_are_not_evidence():
+    long_text = " ".join(["needle " + "x" * 280] * 200)
+    corpus = Corpus([Paper("doc", long_text, "Long", [0])])
+    out = corpus.grep("needle", max_hits=MAX_HITS)
+    assert "[output truncated" in out
+    shown = len(SNIPPET_LINE.findall(out))
+    assert len(corpus.evidence) <= shown < MAX_HITS
