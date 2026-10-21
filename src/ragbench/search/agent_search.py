@@ -15,15 +15,18 @@ Everything is recorded in an `AgentRun`: the answer, every tool call, the ranges
 token usage and the full transcript, so any run can be audited later.
 
 The model client is injected, so tests replay scripted conversations offline. The real
-client needs `pip install -e ".[agent]"` and the ANTHROPIC_API_KEY environment variable.
+client needs `pip install -e ".[agent]"` and the ANTHROPIC_API_KEY environment variable
+(plus ANTHROPIC_WORKSPACE_ID if the key is not tied to a single workspace).
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -301,4 +304,16 @@ def _default_client() -> Any:
         raise ImportError(
             'agent search needs the anthropic SDK: pip install -e ".[agent]"'
         ) from exc
-    return anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from the environment
+    return anthropic.Anthropic(**client_options(os.environ))
+
+
+def client_options(env: Mapping[str, str]) -> dict[str, Any]:
+    """Extra client settings taken from environment variables.
+
+    The SDK reads ANTHROPIC_API_KEY itself. A key that works across several workspaces
+    must also name one per request (the `anthropic-workspace-id` header), otherwise the
+    API answers "This API key is not scoped to a workspace". The SDK doesn't read
+    ANTHROPIC_WORKSPACE_ID for plain API keys, so it is passed on here.
+    """
+    workspace = env.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+    return {"default_headers": {"anthropic-workspace-id": workspace}} if workspace else {}

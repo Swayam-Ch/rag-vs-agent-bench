@@ -9,6 +9,7 @@ from ragbench.search.agent_search import (
     SYSTEM_PROMPT,
     TOOLS,
     AgentSearcher,
+    client_options,
     run_tool,
 )
 from ragbench.search.agent_tools import Corpus, Paper, Read
@@ -240,3 +241,35 @@ def test_real_agent_finds_and_cites_the_passage(corpus):
     assert "8" in run.answer
     assert any(call.name == "grep" for call in run.tool_calls)
     assert run.reads, "the agent should read the passage before answering"
+
+
+# --------------------------------------------------------------------------- #
+# Client settings from the environment
+# --------------------------------------------------------------------------- #
+
+
+def test_workspace_id_becomes_a_request_header():
+    assert client_options({"ANTHROPIC_WORKSPACE_ID": "wrkspc_01abc"}) == {
+        "default_headers": {"anthropic-workspace-id": "wrkspc_01abc"}
+    }
+
+
+@pytest.mark.parametrize(
+    "env", [{}, {"ANTHROPIC_WORKSPACE_ID": ""}, {"ANTHROPIC_WORKSPACE_ID": "  "}]
+)
+def test_no_workspace_id_means_no_extra_settings(env):
+    assert client_options(env) == {}
+
+
+def test_default_client_passes_the_workspace_header(monkeypatch, corpus):
+    import sys
+    import types
+
+    created = []
+    fake = types.SimpleNamespace(Anthropic=lambda **kwargs: created.append(kwargs) or object())
+    monkeypatch.setitem(sys.modules, "anthropic", fake)
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_01abc")
+
+    AgentSearcher(corpus)
+
+    assert created == [{"default_headers": {"anthropic-workspace-id": "wrkspc_01abc"}}]
