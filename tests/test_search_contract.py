@@ -8,9 +8,11 @@ import math
 from collections.abc import Callable
 
 import pytest
-from fakes import HashEmbedder
+from fakes import HashEmbedder, PolicyClient
 
 from ragbench.pipeline.chunk import Chunk, chunk_paragraphs
+from ragbench.search.agent_search import AgentSearcher
+from ragbench.search.agent_tools import Corpus, Paper
 from ragbench.search.base import (
     KeywordSearcher,
     Searcher,
@@ -53,11 +55,18 @@ def hybrid_bm25_vector(chunks: list[Chunk]) -> HybridSearcher:
     return HybridSearcher([BM25Searcher(chunks), vector_with_hash_embedder(chunks)])
 
 
+def agent_with_policy_client(chunks: list[Chunk]) -> AgentSearcher:
+    """The agent on the same documents, driven by a simple scripted 'model'."""
+    papers = [Paper(doc_id, DOCS[doc_id], doc_id, [0]) for doc_id in sorted(DOCS)]
+    return AgentSearcher(Corpus(papers), client=PolicyClient())
+
+
 SEARCHERS: list[Callable[[list[Chunk]], Searcher]] = [
     KeywordSearcher,
     BM25Searcher,
     vector_with_hash_embedder,
     hybrid_bm25_vector,
+    agent_with_policy_client,
 ]
 
 
@@ -92,6 +101,13 @@ def assert_follows_contract(searcher: Searcher, chunks: list[Chunk]) -> None:
 @pytest.mark.parametrize("factory", SEARCHERS, ids=lambda f: f.__name__)
 def test_searcher_follows_contract(factory, chunks):
     assert_follows_contract(factory(chunks), chunks)
+
+
+def test_agent_contract_run_actually_reads_something(chunks):
+    """Guards the contract test itself: an agent that returns nothing passes every rule."""
+    agent = agent_with_policy_client(chunks)
+    for query in ["attention", "dense retrieval", "BM25 baseline"]:
+        assert agent.search(query, k=5), f"no evidence read for {query!r}"
 
 
 @pytest.mark.parametrize("factory", SEARCHERS, ids=lambda f: f.__name__)

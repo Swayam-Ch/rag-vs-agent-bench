@@ -20,7 +20,8 @@ All three search the *same* ingested text, answer the *same* versioned question 
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"            # add ",vector" for vector search (installs PyTorch)
+pip install -e ".[dev]"            # add ",vector" for vector search (installs PyTorch),
+                                   # ",agent" for agentic search (needs ANTHROPIC_API_KEY)
 pytest
 
 # download the corpus defined in data/sources.txt (~1 min, rate-limited), then ingest it
@@ -60,7 +61,7 @@ src/ragbench/
   search/vector_search.py # embeddings + cosine similarity, cached on disk               ✅
   search/hybrid_search.py # reciprocal rank fusion of any searchers (BM25 + vector)     ✅
   search/agent_tools.py  # list_files / grep / read_file: safe, bounded, logged          ✅
-  search/agent_search.py # the tool-calling agent loop                                    ⏳
+  search/agent_search.py # tool-calling agent loop: limits, transcripts, token usage     ✅
 eval/                    # questions.yaml + run_eval.py                                  ⏳
 results/                 # committed run outputs                                         ⏳
 tests/

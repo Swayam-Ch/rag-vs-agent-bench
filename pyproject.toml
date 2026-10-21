@@ -18,6 +18,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+agent = [
+    "anthropic>=1.0",  # the Claude API client
+]
 vector = [
     "sentence-transformers>=3",  # local embedding models; pulls in PyTorch (large)
 ]
