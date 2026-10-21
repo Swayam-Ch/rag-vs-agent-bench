@@ -108,6 +108,45 @@ class ToolCall:
 
 
 @dataclass
+class Citation:
+    """One entry of the answer's "Sources:" list, e.g. "1706.03762 p.9"."""
+
+    ref: str  # as written by the model
+    doc_id: str  # resolved paper, or "" if the reference matches no paper
+    page: int
+
+
+_SOURCES = re.compile(r"^\W*sources?\W*$|^\W*sources?\s*:", re.IGNORECASE | re.MULTILINE)
+_CITATION = re.compile(
+    r"(?P<ref>\d{4}\.\d{4,5}(?:v\d+)?|[0-9a-f]{12})"  # arXiv ID or internal doc ID
+    r"[\s,;:()\-]*(?:p\.?|pp\.?|page|pages)\s*(?P<page>\d+)",
+    re.IGNORECASE,
+)
+
+
+def parse_citations(answer: str, corpus: Corpus) -> list[Citation]:
+    """Read the "Sources:" section of an answer into (paper, page) citations.
+
+    Only text after the last "Sources:" heading counts, so IDs mentioned in the answer
+    itself aren't mistaken for citations. "p.9", "p. 9", "page 9" and "pp. 9-10"
+    (first page) are understood; a reference to an unknown paper keeps doc_id "".
+    """
+    headings = list(_SOURCES.finditer(answer))
+    if not headings:
+        return []
+    section = answer[headings[-1].start() :]
+    citations, seen = [], set()
+    for m in _CITATION.finditer(section):
+        ref, page = m["ref"], int(m["page"])
+        paper = corpus.resolve(re.sub(r"v\d+$", "", ref))
+        citation = Citation(ref, paper.doc_id if paper else "", page)
+        if (citation.doc_id or ref, page) not in seen:
+            seen.add((citation.doc_id or ref, page))
+            citations.append(citation)
+    return citations
+
+
+@dataclass
 class AgentRun:
     question: str
     model: str
@@ -116,7 +155,9 @@ class AgentRun:
     stop: str = "answered"
     turns: int = 0
     tool_calls: list[ToolCall] = field(default_factory=list)
-    reads: list[Read] = field(default_factory=list)
+    reads: list[Read] = field(default_factory=list)  # read_file ranges only
+    evidence: list[Read] = field(default_factory=list)  # reads + grep snippets, in order
+    citations: list[Citation] = field(default_factory=list)  # parsed from "Sources:"
     input_tokens: int = 0
     output_tokens: int = 0
     seconds: float = 0.0
@@ -195,7 +236,7 @@ class AgentSearcher:
 
     def run(self, question: str) -> AgentRun:
         run = AgentRun(question=question, model=self.model)
-        self.corpus.reads = []  # each run starts with a clean evidence log
+        self.corpus.reads, self.corpus.evidence = [], []  # each run starts clean
         messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
         started = time.monotonic()
         try:
@@ -246,6 +287,8 @@ class AgentSearcher:
             run.stop, run.error = "error", f"{type(exc).__name__}: {exc}"
 
         run.reads = list(self.corpus.reads)
+        run.evidence = list(self.corpus.evidence)
+        run.citations = parse_citations(run.answer, self.corpus)
         run.seconds = round(time.monotonic() - started, 2)
         run.messages = messages
         self.last_run = run
@@ -266,10 +309,12 @@ class AgentSearcher:
     # ------------------------------------------------------------------ #
 
     def search(self, query: str, k: int = 10) -> list[SearchResult]:
-        """Run the agent and return the distinct ranges it read, in reading order.
+        """Run the agent and return the distinct ranges it was shown, in order.
 
-        Scores are 1/rank (the first range read scores 1.0); the agent gives no relevance
-        score of its own, so reading order is the only ranking available.
+        That includes grep snippets, not just read_file ranges: an agent that answers
+        from snippets (as on the attention-heads question) did retrieve that evidence.
+        Scores are 1/rank; the agent gives no relevance score of its own, so the order
+        in which it saw things is the only ranking available.
         """
         check_k(k)
         if not query.strip():
@@ -277,7 +322,7 @@ class AgentSearcher:
         run = self.run(query)
         results: list[SearchResult] = []
         seen: set[tuple[str, int, int]] = set()
-        for read in run.reads:
+        for read in run.evidence:
             key = (read.doc_id, read.start, read.end)
             if key in seen:
                 continue

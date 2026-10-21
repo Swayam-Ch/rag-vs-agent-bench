@@ -9,7 +9,9 @@ from ragbench.search.agent_search import (
     SYSTEM_PROMPT,
     TOOLS,
     AgentSearcher,
+    Citation,
     client_options,
+    parse_citations,
     run_tool,
 )
 from ragbench.search.agent_tools import Corpus, Paper, Read
@@ -273,3 +275,80 @@ def test_default_client_passes_the_workspace_header(monkeypatch, corpus):
     AgentSearcher(corpus)
 
     assert created == [{"default_headers": {"anthropic-workspace-id": "wrkspc_01abc"}}]
+
+
+# --------------------------------------------------------------------------- #
+# Evidence from snippets, and citations
+# --------------------------------------------------------------------------- #
+
+
+def test_answer_from_grep_snippets_alone_still_has_evidence(corpus):
+    """What the real agent did on the attention-heads question: grep, grep, answer."""
+    agent, _ = _agent(
+        corpus,
+        [
+            reply(tool_block("t1", "grep", pattern="number of attention heads")),
+            reply(text_block("They vary it.\nSources:\n1706.03762 p.2")),
+        ],
+    )
+    run = agent.run("q")
+    assert run.reads == []
+    assert [e.kind for e in run.evidence] == ["snippet"]
+    assert run.citations == [Citation("1706.03762", "doc1", 2)]
+
+    agent, _ = _agent(
+        corpus,
+        [
+            reply(tool_block("t1", "grep", pattern="number of attention heads")),
+            reply(text_block("They vary it.")),
+        ],
+    )
+    [result] = agent.search("q", k=5)
+    assert "number of attention heads" in result.text
+    # the snippet's leading context starts on page 1; the match itself is on page 2.
+    # Page-level metrics must therefore count every page in [page, page_end].
+    assert result.page <= 2 <= result.page_end
+
+
+@pytest.mark.parametrize(
+    ("sources", "expected"),
+    [
+        ("Sources:\n1706.03762 p.9", [("1706.03762", 9)]),
+        ("Sources:\n- 1706.03762, p. 9", [("1706.03762", 9)]),
+        ("Sources:\n1706.03762v7 page 9", [("1706.03762v7", 9)]),
+        ("Sources:\n1706.03762 pp. 9-10", [("1706.03762", 9)]),
+        ("Sources: 1706.03762 p.9; 1706.03762 p.3", [("1706.03762", 9), ("1706.03762", 3)]),
+        ("Sources:\n1706.03762 p.9\n1706.03762 p.9", [("1706.03762", 9)]),
+        ("Sources:\ndoc1 p.1", []),  # not an arXiv or hash-style ID
+        ("No sources section, but 1706.03762 p.9 is mentioned.", []),
+    ],
+)
+def test_parse_citations(corpus, sources, expected):
+    got = parse_citations(sources, corpus)
+    assert [(c.ref, c.page) for c in got] == expected
+    assert all(c.doc_id == "doc1" for c in got)
+
+
+def test_ids_mentioned_before_the_sources_heading_are_not_citations(corpus):
+    answer = "Unlike 2005.11401 p.4, this paper...\n\nSources:\n1706.03762 p.9"
+    assert [c.ref for c in parse_citations(answer, corpus)] == ["1706.03762"]
+
+
+def test_citation_of_an_unknown_paper_is_kept_but_unresolved(corpus):
+    [c] = parse_citations("Sources:\n9999.99999 p.1", corpus)
+    assert (c.ref, c.doc_id, c.page) == ("9999.99999", "", 1)
+
+
+def test_evidence_and_citations_are_in_the_transcript(corpus, tmp_path):
+    agent, _ = _agent(
+        corpus,
+        [
+            reply(tool_block("t1", "grep", pattern="heads")),
+            reply(text_block("Yes.\nSources:\n1706.03762 p.2")),
+        ],
+        transcript_dir=tmp_path,
+    )
+    agent.run("q")
+    saved = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert saved["evidence"][0]["kind"] == "snippet"
+    assert saved["citations"] == [{"ref": "1706.03762", "doc_id": "doc1", "page": 2}]
