@@ -37,6 +37,9 @@ ragbench search -m vector -k 3 "dense retrieval for open-domain QA"            #
 ragbench search -m hybrid "LoRA rank"
 ragbench search -m agent "which papers evaluate on Natural Questions?"          # needs [agent]
 ragbench search -m bm25 --json "BM25 baseline" > results.json
+
+# check the question set (also runs in CI)
+ragbench questions
 ```
 
 ## Methodology notes
@@ -70,10 +73,18 @@ src/ragbench/
   search/hybrid_search.py # reciprocal rank fusion of any searchers (BM25 + vector)     ✅
   search/agent_tools.py  # list_files / grep / read_file: safe, bounded, logged          ✅
   search/agent_search.py # tool-calling agent loop: limits, transcripts, token usage     ✅
-eval/                    # questions.yaml + run_eval.py                                  ⏳
+eval/questions.yaml      # the answer key: 10 questions, gold papers + pages (see below)  🚧
+  src/ragbench/eval/questions.py # format + validator (`ragbench questions`)            ✅
 results/                 # committed run outputs                                         ⏳
 tests/
 ```
+
+**Where the questions come from.** q001–q002 were written by Swayam. q003–q010 were
+*drafted by Claude, verified by Swayam*: drafted from the ingested text with a quote and
+page for each, then checked by hand against the PDFs. Because Claude is also one of the
+methods under test, the questions lean on details that are hard to know without reading
+this collection (setup details, table values, counts across papers), and each one says in
+its `notes` how it was drafted.
 
 ## License
 

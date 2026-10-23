@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from fakes import HashEmbedder, PolicyClient
@@ -96,7 +97,8 @@ def test_agent_prints_answer_stats_and_evidence(processed, capsys, monkeypatch):
     assert code == 0
     assert out.startswith("Done.")
     assert "stop=answered turns=3" in out and "cost≈$" in out
-    assert "tools: grep(" in out
+    assert "tools (2):" in out
+    assert '    grep {"pattern": "attention|heads"}' in out  # one call per line, args visible
     assert "evidence (agent):" in out
     assert list((processed / "transcripts").glob("*.json"))
 
@@ -174,3 +176,120 @@ def test_estimate_cost():
     # the real run on the attention-heads question: 9,789 in, 562 out, Sonnet 5.5
     assert estimate_cost("claude-sonnet-5-5", 9_789, 562) == pytest.approx(0.025198)
     assert estimate_cost("some-future-model", 1000, 1000) is None
+
+
+# --------------------------------------------------------------------------- #
+# ragbench questions
+# --------------------------------------------------------------------------- #
+
+GOOD = """version: 1
+questions:
+  - id: q001
+    type: single_fact
+    question: How many heads?
+    answer: Eight.
+    gold:
+      - paper: "1706.03762"
+        pages: [5]
+"""
+
+
+def _write(tmp_path, text):
+    path = tmp_path / "questions.yaml"
+    path.write_text(text)
+    return path
+
+
+def _metadata(tmp_path, ids=("1706.03762",)):
+    path = tmp_path / "metadata.jsonl"
+    path.write_text(
+        "".join(
+            json.dumps(
+                {
+                    "arxiv_id": i,
+                    "version": "v1",
+                    "title": "T",
+                    "authors": [],
+                    "published": "2017-01-01",
+                    "category": "cs.CL",
+                }
+            )
+            + "\n"
+            for i in ids
+        )
+    )
+    return path
+
+
+def test_questions_command_reports_ok_and_missing_types(tmp_path, capsys):
+    code = cli.main(
+        [
+            "questions",
+            str(_write(tmp_path, GOOD)),
+            "--metadata",
+            str(_metadata(tmp_path)),
+            "--processed",
+            str(tmp_path),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0 and "1 questions OK (1 single_fact)" in out
+    assert "no questions yet of type: multi_filter" in out
+
+
+def test_questions_command_lists_problems(tmp_path, capsys):
+    bad = GOOD.replace("single_fact", "single-fact")
+    code = cli.main(
+        [
+            "questions",
+            str(_write(tmp_path, bad)),
+            "--metadata",
+            str(_metadata(tmp_path)),
+            "--processed",
+            str(tmp_path),
+        ]
+    )
+    err = capsys.readouterr().err
+    assert code == 1 and "questions.yaml:3: q001: unknown type 'single-fact'" in err
+
+
+def test_questions_command_checks_papers_and_pages(tmp_path, capsys, processed):
+    text = GOOD.replace("[5]", "[99]")
+    code = cli.main(
+        [
+            "questions",
+            str(_write(tmp_path, text)),
+            "--metadata",
+            str(_metadata(tmp_path)),
+            "--processed",
+            str(processed),
+        ]
+    )
+    assert code == 1 and "page 99 of 1706.03762 doesn't exist" in capsys.readouterr().err
+    code = cli.main(
+        [
+            "questions",
+            str(_write(tmp_path, GOOD)),
+            "--metadata",
+            str(_metadata(tmp_path, ids=("2005.11401",))),
+            "--processed",
+            str(tmp_path),
+        ]
+    )
+    assert code == 1 and "1706.03762 is not in the corpus" in capsys.readouterr().err
+
+
+def test_committed_question_file_is_valid(capsys):
+    """The real answer key in eval/questions.yaml must always pass (checked in CI)."""
+    root = Path(__file__).parent.parent
+    code = cli.main(
+        [
+            "questions",
+            str(root / "eval" / "questions.yaml"),
+            "--metadata",
+            str(root / "data" / "metadata.jsonl"),
+            "--processed",
+            str(root / "data" / "processed"),
+        ]
+    )
+    assert code == 0, capsys.readouterr().err
