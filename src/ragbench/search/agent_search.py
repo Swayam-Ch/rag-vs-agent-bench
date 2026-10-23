@@ -36,6 +36,25 @@ from ragbench.search.base import SearchResult, check_k
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
 
+# US dollars per million tokens (input, output), from
+# https://platform.claude.com/docs/en/models/overview as checked on 2026-10-21.
+# Prices change: re-check before publishing costs. Haiku is listed "from" this price.
+PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
+    "claude-fable-5-1": (10.0, 50.0),
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-haiku-5-5": (0.10, 0.50),
+}
+
+
+def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """Dollar cost of a run, or None for a model without a known price."""
+    if model not in PRICES_PER_MTOK:
+        return None
+    price_in, price_out = PRICES_PER_MTOK[model]
+    return (input_tokens * price_in + output_tokens * price_out) / 1_000_000
+
+
 SYSTEM_PROMPT = """\
 You answer questions about a fixed collection of research papers. You cannot see the \
 papers directly; explore them with the tools:
