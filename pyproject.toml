@@ -32,6 +32,7 @@ dev = [
 ]
 
 [project.scripts]
+ragbench = "ragbench.cli:main"
 ragbench-chunk = "ragbench.pipeline.chunk:main"
 ragbench-fetch = "ragbench.pipeline.fetch:main"
 ragbench-ingest = "ragbench.pipeline.ingest:main"

@@ -30,6 +30,13 @@ ragbench-fetch data/sources.txt data/raw --verify   # prove you have the exact s
 ragbench-ingest data/raw data/processed -v
 ragbench-chunk data/processed                       # -> data/processed/chunks.paragraph.1000.jsonl
 ragbench-chunk data/processed --method fixed        # -> chunks.fixed.1000-200.jsonl
+
+# search with any method
+ragbench search "how many attention heads does the Transformer use?"            # BM25
+ragbench search -m vector -k 3 "dense retrieval for open-domain QA"            # needs [vector]
+ragbench search -m hybrid "LoRA rank"
+ragbench search -m agent "which papers evaluate on Natural Questions?"          # needs [agent]
+ragbench search -m bm25 --json "BM25 baseline" > results.json
 ```
 
 ## Methodology notes
@@ -51,6 +58,7 @@ data/sources.txt         # the corpus: 20 arXiv IDs (PDFs themselves are not com
 data/checksums.sha256    # SHA-256 of every PDF, checked on each run                     ✅
 data/metadata.jsonl      # title, authors, date, category per paper (from the arXiv API) ✅
 src/ragbench/
+  cli.py                 # `ragbench search --method {keyword,bm25,vector,hybrid,agent}` ✅
   pipeline/fetch.py      # download the PDFs listed in sources.txt                       ✅
   pipeline/checksums.py  # record / verify file hashes                                   ✅
   pipeline/metadata.py   # arXiv API client + metadata snapshot                          ✅
