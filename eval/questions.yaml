@@ -1,0 +1,76 @@
+# The benchmark's answer key. Every method is scored against it.
+#
+# Rules for writing questions (see src/ragbench/eval/questions.py for the format):
+# * Write the question AND its answer from the papers themselves, BEFORE running any
+#   method on it. Never copy an answer from a method's output: that method would be
+#   grading itself.
+# * `gold` lists every paper (and the pages) a complete answer needs.
+# * Quote arXiv IDs ("2005.11401"); unquoted, YAML reads them as numbers.
+# * Prefer details a model is unlikely to remember: appendix numbers, footnotes,
+#   "which papers in THIS collection", counts across papers.
+# * Check it with:  ragbench questions
+version: 1
+questions:
+  - id: q001
+    type: single_fact
+    question: How many parallel attention heads does the base Transformer model use?
+    answer: 8 heads (h = 8), each with d_k = d_v = 64.
+    gold:
+      - paper: "1706.03762"
+        pages: [5]
+    notes: >
+      Seed question, checked on the real corpus (BM25 rank 1 is the p.5 passage).
+      Easy and famous: a model may answer it from memory, so it mainly tests retrieval.
+
+  - id: q002
+    type: single_fact
+    question: >
+      In the Transformer's ablation study, what happens to translation quality as the
+      number of attention heads grows, at constant computation?
+    answer: >
+      It improves from 1 head (24.9 BLEU on newstest2013) to a peak at 8-16 heads (25.8),
+      then drops at 32 heads (25.4): too many heads hurt quality.
+    gold:
+      - paper: "1706.03762"
+        pages: [9]
+    notes: >
+      Seed question (Table 3 rows (A)). The BLEU values were read from a grep of the
+      corpus during an agent trial, so confirm them in the PDF before relying on them.
+      Worded without the paper's phrase "attention heads", vector search ranked the
+      passage ~23rd in an earlier trial.
+
+# Templates for the other types; copy one above this line, fill it in, remove the "#".
+#
+#  - id: q003
+#    type: multi_filter
+#    question: Which papers in the collection evaluate on Natural Questions?
+#    answer: <list every paper, checked by reading each one yourself>
+#    gold:
+#      - paper: "2004.04906"
+#        pages: [<page>]
+#      - paper: "2005.11401"
+#        pages: [<page>]
+#
+#  - id: q004
+#    type: cross_doc
+#    question: <compare a number or design choice across two papers>
+#    answer: <...>
+#    gold:
+#      - paper: "<arXiv ID>"
+#        pages: [<page>]
+#      - paper: "<another arXiv ID>"
+#        pages: [<page>]
+#
+#  - id: q005
+#    type: negation
+#    question: Which papers in the collection do NOT <...>?
+#    answer: <the papers that don't>
+#    gold:
+#      - paper: "<arXiv ID>"
+#        pages: [<page where you confirmed it, e.g. its experiments section>]
+#
+#  - id: q006
+#    type: unanswerable
+#    question: <something plausible that none of the papers report>
+#    answer: The papers don't report this.
+#    gold: []

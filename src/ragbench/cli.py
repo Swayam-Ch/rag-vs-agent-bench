@@ -160,9 +160,52 @@ def _print_agent(run) -> None:
     )
     if run.error:
         print(f"error: {run.error}")
-    calls = ", ".join(f"{c.name}({json.dumps(c.input)[:60]})" for c in run.tool_calls)
-    print(f"tools: {calls or 'none'}")
+    print(f"tools ({len(run.tool_calls)}):" if run.tool_calls else "tools: none")
+    for call in run.tool_calls:
+        args = json.dumps(call.input, ensure_ascii=False)
+        args = args if len(args) <= 110 else args[:109] + "…"
+        print(f"  {'!' if call.is_error else ' '} {call.name} {args}")
     print()
+
+
+def _questions(args: argparse.Namespace) -> int:
+    """Validate the question file against the corpus and print a summary."""
+    from ragbench.eval.questions import QuestionSetError, check_against_corpus, load
+    from ragbench.pipeline.metadata import read_metadata
+
+    try:
+        questions = load(args.path)
+    except FileNotFoundError:
+        print(f"error: {args.path} not found", file=sys.stderr)
+        return 1
+    except QuestionSetError as exc:
+        print("\n".join(exc.problems), file=sys.stderr)
+        print(f"{len(exc.problems)} problem(s) in {args.path}", file=sys.stderr)
+        return 1
+
+    known = set(read_metadata(args.metadata))
+    page_counts = None
+    manifest = args.processed / "manifest.jsonl"
+    if manifest.exists():
+        entries = [json.loads(line) for line in manifest.read_text().splitlines()]
+        page_counts = {m["arxiv_id"]: m["n_pages"] for m in entries if m.get("arxiv_id")}
+    problems = check_against_corpus(questions, known, page_counts) if known else []
+    if not known:
+        print(f"note: {args.metadata} not found; paper IDs not checked", file=sys.stderr)
+    if page_counts is None:
+        print("note: no ingested corpus; page numbers not checked", file=sys.stderr)
+    if problems:
+        print("\n".join(problems), file=sys.stderr)
+        print(f"{len(problems)} problem(s) in {args.path}", file=sys.stderr)
+        return 1
+
+    counts = questions.by_type()
+    summary = ", ".join(f"{n} {t}" for t, n in counts.items() if n)
+    print(f"{len(questions.questions)} questions OK ({summary})")
+    missing = [t for t, n in counts.items() if n == 0]
+    if missing:
+        print(f"no questions yet of type: {', '.join(missing)}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -180,7 +223,14 @@ def main(argv: list[str] | None = None) -> int:
     agent.add_argument("--model", default="claude-sonnet-5-5")
     agent.add_argument("--max-turns", type=int, default=15)
 
+    check = sub.add_parser("questions", help="validate the question set")
+    check.add_argument("path", type=Path, nargs="?", default=Path("eval/questions.yaml"))
+    check.add_argument("--metadata", type=Path, default=Path("data/metadata.jsonl"))
+    check.add_argument("--processed", type=Path, default=Path("data/processed"))
+
     args = parser.parse_args(argv)
+    if args.command == "questions":
+        return _questions(args)
     if args.k < 1:
         parser.error("-k must be at least 1")
     return _search(args)

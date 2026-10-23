@@ -37,6 +37,9 @@ ragbench search -m vector -k 3 "dense retrieval for open-domain QA"            #
 ragbench search -m hybrid "LoRA rank"
 ragbench search -m agent "which papers evaluate on Natural Questions?"          # needs [agent]
 ragbench search -m bm25 --json "BM25 baseline" > results.json
+
+# check the question set (also runs in CI)
+ragbench questions
 ```
 
 ## Methodology notes
@@ -70,7 +73,8 @@ src/ragbench/
   search/hybrid_search.py # reciprocal rank fusion of any searchers (BM25 + vector)     ✅
   search/agent_tools.py  # list_files / grep / read_file: safe, bounded, logged          ✅
   search/agent_search.py # tool-calling agent loop: limits, transcripts, token usage     ✅
-eval/                    # questions.yaml + run_eval.py                                  ⏳
+eval/questions.yaml      # the answer key: questions, gold papers + pages (hand-written) 🚧
+  src/ragbench/eval/questions.py # format + validator (`ragbench questions`)            ✅
 results/                 # committed run outputs                                         ⏳
 tests/
 ```
