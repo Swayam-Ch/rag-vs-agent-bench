@@ -72,6 +72,29 @@ def test_every_type_can_be_written():
     assert parse(_doc(*questions)).by_type() == dict.fromkeys(TYPES, 1)
 
 
+def test_negation_may_check_a_whole_paper_with_empty_pages():
+    gold = '      - paper: "1706.03762"\n        pages: []\n' + TWO_PAPERS
+    [q] = parse(_doc(_q(qtype="negation", gold=gold))).questions
+    assert q.gold[0] == Evidence("1706.03762", ())
+    assert q.gold_papers == ("1706.03762", "2004.04906", "2005.11401")
+    # and the page check against the corpus skips it instead of crashing on max(())
+    assert (
+        check_against_corpus(
+            parse(_doc(_q(qtype="negation", gold=gold))),
+            {"1706.03762", "2004.04906", "2005.11401"},
+            {"1706.03762": 15, "2004.04906": 13, "2005.11401": 19},
+        )
+        == []
+    )
+
+
+def test_only_negation_may_use_empty_pages():
+    empty = '      - paper: "1706.03762"\n        pages: []\n'
+    for qtype in ("single_fact", "multi_filter"):
+        problems = _problems(_doc(_q(qtype=qtype, gold=empty)))
+        assert any("only a negation question may use []" in p for p in problems), problems
+
+
 def test_line_numbers_point_at_each_question():
     text = _doc(_q(qid="q001"), _q(qid="q002"))
     assert [q.line for q in parse(text).questions] == [3, 10]  # each _q() is 7 lines

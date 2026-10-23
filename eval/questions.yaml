@@ -9,6 +9,12 @@
 # * Prefer details a model is unlikely to remember: appendix numbers, footnotes,
 #   "which papers in THIS collection", counts across papers.
 # * Check it with:  ragbench questions
+#
+# Provenance: q001-q002 were written by Swayam. q003-q010 were drafted by Claude on
+# 2026-10-23 from the ingested text (data/processed), each with a short quote and page
+# in its notes, and verified by Swayam against the PDFs. Claude is also one of the
+# methods being tested (the agent), so these questions favour details that are hard to
+# know without reading THIS collection: counts across papers, setup details, tables.
 version: 1
 questions:
   - id: q001
@@ -34,43 +40,186 @@ questions:
       - paper: "1706.03762"
         pages: [9]
     notes: >
-      Seed question (Table 3 rows (A)). The BLEU values were read from a grep of the
-      corpus during an agent trial, so confirm them in the PDF before relying on them.
+      Seed question (Table 3 rows (A), dev BLEU: 1 head 24.9, 4 heads 25.5, 8 heads 25.8,
+      16 heads 25.8, 32 heads 25.4), checked in the ingested text of p.9.
       Worded without the paper's phrase "attention heads", vector search ranked the
       passage ~23rd in an earlier trial.
 
-# Templates for the other types; copy one above this line, fill it in, remove the "#".
-#
-#  - id: q003
-#    type: multi_filter
-#    question: Which papers in the collection evaluate on Natural Questions?
-#    answer: <list every paper, checked by reading each one yourself>
-#    gold:
-#      - paper: "2004.04906"
-#        pages: [<page>]
-#      - paper: "2005.11401"
-#        pages: [<page>]
-#
-#  - id: q004
-#    type: cross_doc
-#    question: <compare a number or design choice across two papers>
-#    answer: <...>
-#    gold:
-#      - paper: "<arXiv ID>"
-#        pages: [<page>]
-#      - paper: "<another arXiv ID>"
-#        pages: [<page>]
-#
-#  - id: q005
-#    type: negation
-#    question: Which papers in the collection do NOT <...>?
-#    answer: <the papers that don't>
-#    gold:
-#      - paper: "<arXiv ID>"
-#        pages: [<page where you confirmed it, e.g. its experiments section>]
-#
-#  - id: q006
-#    type: unanswerable
-#    question: <something plausible that none of the papers report>
-#    answer: The papers don't report this.
-#    gold: []
+  - id: q003
+    type: single_fact
+    question: >
+      How was the DPR model in the main experiments trained: what batch size, how many
+      extra negative passages per question, and for how many epochs on the large datasets?
+    answer: >
+      In-batch negatives with a batch size of 128, plus one additional BM25 negative
+      passage per question; up to 40 epochs for the large datasets (NQ, TriviaQA, SQuAD)
+      and 100 epochs for the small ones (TREC, WQ).
+    gold:
+      - paper: "2004.04906"
+        pages: [5]
+    notes: >
+      Drafted by Claude. Quote (p.5): "trained using the in-batch negative setting
+      (Section 3.2) with a batch size of 128 and one additional BM25 negative passage per
+      question. We trained the question and passage encoders for up to 40 epochs for
+      large datasets (NQ, TriviaQA, SQuAD) and 100 epochs for small datasets (TREC, WQ)".
+
+  - id: q004
+    type: single_fact
+    question: >
+      Roughly how many contractors were hired to write demonstrations, compare outputs
+      and run the main evaluations for InstructGPT, and through which platforms?
+    answer: About 40 contractors, hired on Upwork and through ScaleAI.
+    gold:
+      - paper: "2203.02155"
+        pages: [7]
+    notes: >
+      Drafted by Claude. Quote (p.7): "we hired a team of about 40 contractors on Upwork
+      and through ScaleAI". Repeated in Appendix B (p.19: "We hired about 40 contractors"),
+      so p.19 is accepted evidence too if the metric ever needs it.
+
+  - id: q005
+    type: single_fact
+    question: >
+      How many annotated example trajectories per task type did ReAct use to prompt the
+      model in ALFWorld, and where did they come from?
+    answer: Three trajectories per task type, randomly chosen and annotated from the training set.
+    gold:
+      - paper: "2210.03629"
+        pages: [7]
+    notes: >
+      Drafted by Claude. Quote (p.7): "To prompt ReAct, we randomly annotate three
+      trajectories from the training set for each task type".
+
+  - id: q006
+    type: multi_filter
+    question: >
+      Which papers in the collection report their own experimental results on Natural
+      Questions (NQ)?
+    answer: >
+      Nine: REALM, DPR, RAG, GPT-3, BEIR, Contriever, Atlas, Toolformer and Lost in the
+      Middle. Not counted: ColBERT ("Nq" there is a variable, not the dataset), Self-RAG
+      (NQ is only part of its training mixture) and the RAG survey (it lists NQ in a table
+      of datasets but runs no experiments).
+    gold:
+      - paper: "2002.08909"  # REALM, Table 1: NQ (79k/4k) column
+        pages: [7]
+      - paper: "2004.04906"  # DPR, 41.5 EM on open NQ
+        pages: [8]
+      - paper: "2005.11401"  # RAG, Table 2: RAG-Seq. 44.5
+        pages: [6]
+      - paper: "2005.14165"  # GPT-3, NQ 14.6 / 23.0 / 29.9 (zero/one/few-shot)
+        pages: [13, 14]
+      - paper: "2104.08663"  # BEIR, NQ row of the main results table
+        pages: [7]
+      - paper: "2112.09118"  # Contriever, Table 1: recall@k on NQ test
+        pages: [7]
+      - paper: "2208.03299"  # Atlas, 42.4% on NQ with 64 examples
+        pages: [2]
+      - paper: "2302.04761"  # Toolformer, Table 5: NQ 17.7
+        pages: [7]
+      - paper: "2307.03172"  # Lost in the Middle, task built from NaturalQuestions-Open
+        pages: [3]
+    notes: >
+      Drafted by Claude by grepping every paper for "Natural Questions",
+      "NaturalQuestions" and "NQ" and reading each match. An agent trial (before this key
+      was written) answered 11, including Self-RAG and the survey: the exclusions above
+      are the judgement calls to confirm.
+
+  - id: q007
+    type: multi_filter
+    question: >
+      Which papers use the FAISS library in their own system or experiments (not just
+      mention it as background)?
+    answer: >
+      Four: DPR (FAISS index over the passages, HNSW), ColBERT (faiss IVFPQ index for
+      end-to-end retrieval), RAG (a single MIPS index built with FAISS, HNSW) and BEIR
+      (ColBERT's candidates retrieved with faiss). Contriever only mentions FAISS as an
+      example of a k-nearest-neighbour library, so it doesn't count.
+    gold:
+      - paper: "2004.04906"
+        pages: [3, 7]
+      - paper: "2004.12832"
+        pages: [5, 6]
+      - paper: "2005.11401"
+        pages: [4, 17]
+      - paper: "2104.08663"
+        pages: [6]
+    notes: >
+      Drafted by Claude. Quotes: DPR p.3 "index them using FAISS (Johnson et al., 2017)
+      offline"; ColBERT p.5 "we employ an off-the-shelf library ... namely faiss [15] from
+      Facebook"; RAG p.4 "build a single MIPS index using FAISS [23] with a Hierarchical
+      Navigable Small World approximation"; BEIR p.6 "top-k candidates are retrieved using
+      ANN with faiss [29] (faiss depth = 100)". Excluded: Contriever p.3 "retrieval is
+      performed with a fast k-nearest neighbors library such as FAISS".
+
+  - id: q008
+    type: cross_doc
+    question: >
+      DPR and Contriever both report BM25's top-20 retrieval accuracy on the Natural
+      Questions test set. What value does each paper give, and why could they differ?
+    answer: >
+      DPR reports 59.1 (its own BM25 run); Contriever reports 62.9, taken from Ma et al.
+      (2021). The numbers come from different BM25 implementations and settings, so they
+      are not the same measurement. (For reference: DPR trained on NQ gets 78.4 and
+      unsupervised Contriever 67.8 at top-20.)
+    gold:
+      - paper: "2004.04906"
+        pages: [5]
+      - paper: "2112.09118"
+        pages: [7]
+    notes: >
+      Drafted by Claude. DPR Table 2 (p.5), row "None BM25", first NQ column: 59.1.
+      Contriever Table 1 (p.7): "BM25 (Ma et al., 2021) - 62.9 78.3" (R@5 R@20 R@100 on
+      NaturalQuestions). Needs both papers: neither one quotes the other's BM25 number.
+      The "why" part is the reason given above (different sources), not a claim either
+      paper makes; a judge should accept any answer that gives both numbers.
+
+  - id: q009
+    type: negation
+    question: >
+      Which papers in the collection never mention BM25 in their text (main body and
+      appendices; the bibliography doesn't count)?
+    answer: >
+      Ten: Attention Is All You Need, BERT, Sentence-BERT, GPT-3, LoRA, Chain-of-Thought,
+      InstructGPT, ReAct, Lost in the Middle and Self-RAG.
+    gold:
+      - paper: "1706.03762"
+        pages: []
+      - paper: "1810.04805"
+        pages: []
+      - paper: "1908.10084"
+        pages: []
+      - paper: "2005.14165"
+        pages: []
+      - paper: "2106.09685"
+        pages: []
+      - paper: "2201.11903"
+        pages: []
+      - paper: "2203.02155"
+        pages: []
+      - paper: "2210.03629"
+        pages: []
+      - paper: "2307.03172"
+        pages: []
+      - paper: "2310.11511"
+        pages: []
+    notes: >
+      Drafted by Claude: a case-insensitive search for "bm25", "bm-25" and "okapi" finds
+      no match in these ten (references already stripped by ingestion). Every other paper
+      has at least one: REALM, Atlas, Toolformer and the survey have exactly one each, so
+      those are the ones to double-check in the PDFs. To verify in a PDF viewer, search
+      "BM25" and ignore hits in the references.
+
+  - id: q010
+    type: unanswerable
+    question: How much money, in US dollars, did it cost to train GPT-3 175B?
+    answer: >
+      The papers don't say. The GPT-3 paper gives the training compute (several thousand
+      petaflop/s-days) and says retraining was too costly, but no dollar figure.
+    gold: []
+    notes: >
+      Drafted by Claude. A widely repeated outside estimate exists, so a model answering
+      from memory will be tempted to give a number: this tests whether a method sticks to
+      the collection. Checked: no "$... million" or "training cost" figure in any paper;
+      GPT-3 p.39 says "several thousand petaflop/s-days", p.9 and p.31 "due to the cost of
+      training" with no amount.

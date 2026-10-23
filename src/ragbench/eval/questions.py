@@ -20,7 +20,9 @@ A question looks like this:
 * single_fact   the answer is in one place in one paper
 * multi_filter  "which papers do X (and Y)": the answer is the set of papers in `gold`
 * cross_doc     combining facts from two or more papers (compare, contrast)
-* negation      "which papers do NOT ...": the set of papers that don't
+* negation      "which papers do NOT ...": the set of papers that don't. Absence has no
+                page to point at, so these entries may say `pages: []`, meaning "the
+                whole paper was checked"; they are scored on papers only.
 * unanswerable  the papers don't contain the answer; `gold` is empty, and the right
                 response is to say so
 
@@ -159,7 +161,7 @@ def _parse_question(item: object, where: str, line: int) -> tuple[Question | Non
         if not isinstance(item.get(key), str) or not item[key].strip():
             problems.append(f"{where}: '{key}' must be a non-empty text")
 
-    gold, gold_problems = _parse_gold(item.get("gold", []), where)
+    gold, gold_problems = _parse_gold(item.get("gold", []), where, qtype)
     problems += gold_problems
     papers = {e.paper for e in gold}
     if qtype == "unanswerable" and gold:
@@ -188,7 +190,7 @@ def _parse_question(item: object, where: str, line: int) -> tuple[Question | Non
     )
 
 
-def _parse_gold(raw: object, where: str) -> tuple[list[Evidence], list[str]]:
+def _parse_gold(raw: object, where: str, qtype: object = None) -> tuple[list[Evidence], list[str]]:
     if not isinstance(raw, list):
         return [], [f"{where}: 'gold' must be a list of {{paper, pages}} entries"]
     evidence, problems = [], []
@@ -210,8 +212,15 @@ def _parse_gold(raw: object, where: str) -> tuple[list[Evidence], list[str]]:
         if not _ARXIV.match(paper):
             problems.append(f'{label}: paper {paper!r} is not an arXiv ID like "1706.03762"')
         pages = entry.get("pages")
+        if qtype == "negation" and pages == []:
+            # "this paper never does X": checked across the whole paper, no single page
+            evidence.append(Evidence(paper, ()))
+            continue
         if not isinstance(pages, list) or not pages:
-            problems.append(f"{label}: 'pages' must be a non-empty list of page numbers")
+            problems.append(
+                f"{label}: 'pages' must be a non-empty list of page numbers"
+                " (only a negation question may use [] for 'the whole paper')"
+            )
             continue
         if not all(isinstance(p, int) and not isinstance(p, bool) and p >= 1 for p in pages):
             problems.append(f"{label}: pages must be whole numbers from 1 up, got {pages!r}")
@@ -235,7 +244,12 @@ def check_against_corpus(
             where = f"line {q.line}: {q.id}"
             if e.paper not in known_papers:
                 problems.append(f"{where}: paper {e.paper} is not in the corpus")
-            elif page_counts and e.paper in page_counts and max(e.pages) > page_counts[e.paper]:
+            elif (
+                page_counts
+                and e.pages
+                and e.paper in page_counts
+                and max(e.pages) > page_counts[e.paper]
+            ):
                 problems.append(
                     f"{where}: page {max(e.pages)} of {e.paper} doesn't exist "
                     f"(the paper has {page_counts[e.paper]} pages)"
