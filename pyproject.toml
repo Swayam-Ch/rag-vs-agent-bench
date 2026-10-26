@@ -22,10 +22,14 @@ dependencies = [
 agent = [
     "anthropic>=1.0",  # the Claude API client
 ]
+plot = [
+    "matplotlib>=3.8",  # the README chart (ragbench chart)
+]
 vector = [
     "sentence-transformers>=3",  # local embedding models; pulls in PyTorch (large)
 ]
 dev = [
+    "matplotlib>=3.8",  # so the chart is tested in CI
     "pytest>=8",
     "rank_bm25>=0.2.2",  # reference implementation, only used to cross-check our BM25
     "ruff>=0.5",

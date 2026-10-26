@@ -47,6 +47,7 @@ ragbench run --methods bm25,agent                   # the agent costs money: opt
 ragbench run --methods bm25 --questions q001,q006 -k 5
 ragbench run --methods bm25,vector,hybrid,agent --judge   # + graded answers (costs money)
 ragbench summarize results/<run>                    # markdown tables for the README
+ragbench chart results/<run>                        # accuracy_by_type.png (needs [plot])
 ```
 
 Each run gets its own folder: `run.json` (config, input checksums, git commit, package
@@ -64,6 +65,21 @@ as "partial". Answers that say "the papers don't say" are counted apart from con
 wrong answers. Answer and judge tokens, time and cost are recorded per question. The rubric, its pitfalls (self-
 preference, verbosity, the judge's own knowledge) and their mitigations are in
 `src/ragbench/eval/grade.py`; spot-check the verdicts' reasons before trusting them.
+
+## Results
+
+First full run ([`results/2026-10-26T120551Z`](results/2026-10-26T120551Z/summary.md)):
+4 methods x 20 questions, answers graded by an LLM judge. Findings and limitations come
+with #23; the full tables are in the run's `summary.md`.
+
+![Accuracy by question type, per method](results/2026-10-26T120551Z/accuracy_by_type.png)
+
+| method | recall@5 | MRR | paper recall | accuracy | cost / q | time / q |
+|:---|---:|---:|---:|---:|---:|---:|
+| **bm25** | 0.61 | 0.58 | 0.88 | 0.66 | $0.012 | 3.9 s |
+| **vector** | 0.48 | 0.49 | 0.87 | 0.55 | $0.011 | 4.2 s |
+| **hybrid** | 0.56 | 0.55 | 0.93 | 0.65 | $0.011 | 3.9 s |
+| **agent** | 0.45 | 0.40 | 1.00 | 1.00 | $0.045 | 11.0 s |
 
 ## Methodology notes
 
@@ -102,6 +118,7 @@ eval/questions.yaml      # the answer key: 10 questions, gold papers + pages (se
   src/ragbench/eval/run.py       # `ragbench run`: every method x question, saved      ✅
   src/ragbench/eval/grade.py     # answers from passages + LLM judge (`--judge`)         ✅
   src/ragbench/eval/summarize.py # `ragbench summarize`: markdown tables from a run      ✅
+  src/ragbench/eval/chart.py     # `ragbench chart`: accuracy by question type (PNG)    ✅
 results/                 # committed run outputs (agent transcripts stay local)         ⏳
 tests/
 ```
