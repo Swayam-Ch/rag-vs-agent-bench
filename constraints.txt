@@ -1,0 +1,15 @@
+# Exact versions of the packages that can change the numbers, as recorded in the
+# committed run's run.json (results/2026-10-26T120551Z, Python 3.14).
+# Install with them to reproduce that run:
+#   pip install -e ".[dev,vector,agent,plot]" -c constraints.txt
+# pypdf decides the extracted text (and so the chunks, the checksums and config_hash);
+# the embedding stack decides the vectors; the anthropic SDK decides the requests.
+# fonttools (also used by pypdf) wasn't recorded by that run; later runs record it.
+numpy==2.5.4
+pypdf==6.19.0
+pyyaml==6.0.3
+rank-bm25==0.2.2
+sentence-transformers==6.1.0
+transformers==5.19.0
+torch==2.14.1
+anthropic==1.17.0

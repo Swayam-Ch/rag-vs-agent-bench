@@ -367,7 +367,7 @@ questions:
     type: negation
     author: llm
     question: >
-      Of the papers that report their own results on Natural Questions (see q006),
+      Of the papers that report their own experimental results on Natural Questions,
       which do NOT report results on TriviaQA?
     answer: >
       Three: REALM, BEIR and Lost in the Middle. (DPR, RAG, GPT-3, Contriever, Atlas and
@@ -432,7 +432,7 @@ questions:
     type: negation
     author: llm
     question: >
-      Of the papers that report their own results on Natural Questions (see q006),
+      Of the papers that report their own experimental results on Natural Questions,
       which do NOT use a learned (neural) retriever in those experiments?
     answer: >
       Two: GPT-3 (closed-book, no retrieval at all) and Toolformer (its search tool is

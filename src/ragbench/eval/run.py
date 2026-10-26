@@ -62,6 +62,8 @@ PACKAGES = (
     "rag-vs-agent-bench",
     "numpy",
     "pypdf",
+    "fonttools",  # pypdf uses it to decode math fonts, so it affects the extracted text
+    "huggingface-hub",
     "pyyaml",
     "rank-bm25",
     "sentence-transformers",
