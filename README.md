@@ -2,30 +2,30 @@
 
 [![CI](https://github.com/Swayam-Ch/rag-vs-agent-bench/actions/workflows/ci.yml/badge.svg)](https://github.com/Swayam-Ch/rag-vs-agent-bench/actions/workflows/ci.yml)
 
-**Does agentic file search beat vector search?** A reproducible benchmark on public data.
+Does agentic file search beat vector search? A reproducible benchmark on public data.
 
-> **Finding:** on 20 questions about 20 ML papers, an LLM agent that searches the papers
-> with `grep` and `read` answered all 20 correctly (accuracy 1.00). Retrieval-augmented
-> answers from the same model scored 0.55 (vector), 0.65 (hybrid) and 0.66 (BM25). The
-> agent cost about 4x as much per question and took about 3x as long. Most of the gap is
-> on questions that need *every* paper checked: "which papers …" lists, and above all
-> "which papers do NOT …" (0.24–0.30 without the agent). On single facts, BM25 matched
-> the agent. These are small numbers on
-> famous papers with LLM-drafted questions: read [Limitations](#limitations) before
-> quoting them.
+> On 20 questions about 20 ML papers, an LLM agent that searches the papers with `grep`
+> and `read` answered all 20 correctly (accuracy 1.00). Answers written by the same model
+> from retrieved passages scored 0.55 with vector search, 0.65 with hybrid and 0.66 with
+> BM25. The agent cost about 4x as much per question and took about 3x as long. Most of
+> the gap comes from questions that require checking every paper, such as "which papers
+> ..." lists and especially "which papers do NOT ...", where the other methods scored
+> 0.24 to 0.30. On single facts, BM25 matched the agent. The sample is small, the papers
+> are famous and an LLM drafted most of the questions, so read the
+> [limitations](#limitations) before quoting these numbers.
 
-The benchmark compares these ways of answering questions over a document collection:
+The benchmark compares five ways of answering questions over a document collection:
 
 | Method  | How it finds context |
 |---------|----------------------|
-| Keyword | count of query words in each chunk (a floor, not a contender) |
+| Keyword | count of query words in each chunk (a baseline any real method should beat) |
 | BM25    | classic lexical ranking, implemented from scratch |
 | Vector  | embed chunks, cosine similarity |
 | Hybrid  | BM25 + vector, fused by reciprocal rank |
 | Agent   | an LLM with `list_files` / `grep` / `read_file` tools over the raw text |
 
-All of them search the *same* ingested text, answer the *same* versioned question set,
-and every run's raw output is committed under `results/`.
+All of them search the same ingested text and answer the same versioned question set.
+Every run's raw output is committed under `results/`.
 
 ## Quickstart
 
@@ -66,84 +66,89 @@ and model versions, a summary per method) plus one `<method>.jsonl` with a row p
 question (ranked results with pages, retrieval metrics, timing; for the agent also the
 answer, tool calls, tokens and cost). Runs with the same `config_hash` are comparable.
 
-With `--judge`, every method also has to *answer*. The chunk-based methods get an answer
-written from their top-k passages by the agent's model, so only retrieval differs. An LLM
-judge (Opus by default, a different model from the writer) grades each answer against
-the reference as correct, partial or wrong, with a one-line reason. "Which papers"
-questions are scored by F1 of the papers named against the gold papers (computed in
-code from the papers the judge extracts), so 1 of 10 and 9 of 10 no longer both count
-as "partial". Answers that say "the papers don't say" are counted apart from confident
-wrong answers. Answer and judge tokens, time and cost are recorded per question. The rubric, its pitfalls (self-
-preference, verbosity, the judge's own knowledge) and their mitigations are in
-`src/ragbench/eval/grade.py`; spot-check the verdicts' reasons before trusting them.
+With `--judge`, every method also has to answer the question. The agent's model writes an
+answer for each chunk-based method from that method's top-k passages, so the methods
+differ only in what they retrieved. An LLM judge (Opus by default, a different model from
+the writer) grades each answer against the reference as correct, partial or wrong and
+gives a one-line reason. For "which papers" questions, the code scores the F1 of the
+papers the answer names against the gold papers, so naming 1 of 10 papers scores lower
+than naming 9 of 10. The summary counts answers that say "the papers don't say"
+separately from confident wrong answers. Each question records the tokens, time and cost
+of answering and judging. `src/ragbench/eval/grade.py` describes the rubric, the known
+weaknesses of LLM judges (preference for their own style, for longer answers, for what
+they already know) and how the rubric handles them. Read a sample of the judge's reasons
+before trusting its verdicts.
 
 ## Results
 
 First full run ([`results/2026-10-26T120551Z`](results/2026-10-26T120551Z/summary.md)),
-from commit `eb37542`: 4 methods x 20 questions, top 10 passages per question, answers
-graded by an LLM judge. The chunk-based methods' answers were written by the agent's
-model (`claude-sonnet-5-5`) from their passages, so only retrieval differs between them.
-Full tables, per-type and per-author breakdowns are in the run's `summary.md`.
+from commit `eb37542`: 4 methods, 20 questions, the top 10 passages per question, and
+answers graded by an LLM judge. The agent's model (`claude-sonnet-5-5`) wrote the answers
+for the chunk-based methods from their passages. The run's `summary.md` has the full
+tables, including accuracy by question type and by question author.
 
 ![Accuracy by question type, per method](results/2026-10-26T120551Z/accuracy_by_type.png)
 
 | method | recall@5 | MRR | paper recall | accuracy | cost / q | time / q |
 |:---|---:|---:|---:|---:|---:|---:|
-| **bm25** | 0.61 | 0.58 | 0.88 | 0.66 | $0.012 | 3.9 s |
-| **vector** | 0.48 | 0.49 | 0.87 | 0.55 | $0.011 | 4.2 s |
-| **hybrid** | 0.56 | 0.55 | 0.93 | 0.65 | $0.011 | 3.9 s |
-| **agent** | 0.45 | 0.40 | 1.00 | 1.00 | $0.045 | 11.0 s |
+| bm25 | 0.61 | 0.58 | 0.88 | 0.66 | $0.012 | 3.9 s |
+| vector | 0.48 | 0.49 | 0.87 | 0.55 | $0.011 | 4.2 s |
+| hybrid | 0.56 | 0.55 | 0.93 | 0.65 | $0.011 | 3.9 s |
+| agent | 0.45 | 0.40 | 1.00 | 1.00 | $0.045 | 11.0 s |
 
-recall@5 and MRR: did the gold *page* appear in the top 5, and how high was the first one.
-Paper recall: the share of gold papers found anywhere in what a method returned.
-Accuracy: correct 1, partial 0.5, wrong 0, except "which papers" questions, which score
-the F1 of the papers named. Cost and time are per question and include writing the
-answer; judging the run cost another $0.76.
+Recall@5 is the share of gold pages in a method's top 5 results, and MRR rewards ranking
+the first one high. Paper recall is the share of gold papers found anywhere in what a
+method returned. Accuracy gives 1 for correct, 0.5 for partial and 0 for wrong, except on
+"which papers" questions, which score the F1 of the papers named. Cost and time are per
+question and include writing the answer. Judging the whole run cost another $0.76.
 
 ### What the numbers show
 
-1. **Exhaustive questions are where top-k retrieval breaks.** On "which papers do NOT
-   …" (6 questions), BM25, vector and hybrid scored 0.24–0.30. Ten passages can't show
-   that a paper *lacks* something; the agent greps every paper and gets 1.00. Questions
-   that need two papers' tables at once (q008) fail the same way: one search can't fetch
-   both.
-2. **For a single fact, BM25 is enough.** BM25 answered all 5 single-fact questions
-   correctly, like the agent, at a quarter of the cost. Vector and hybrid got 4 of 5.
-3. **BM25 ranks best; hybrid finds the most.** The questions share exact terms with the
-   papers, which BM25 rewards (MRR 0.58 against vector's 0.49). Hybrid found the most gold
-   papers (0.93) but often put a near-miss page first.
-4. **The agent's rank metrics are the lowest, and that's expected.** Its "ranking" is
-   the order in which it searched, not relevance; paper recall (1.00) is its meaningful
-   retrieval number. It answered from `grep` snippets alone on 17 of 20 questions;
-   only 3 times did it open a paper with `read_file`.
-5. **Failing honestly vs failing confidently.** Of the 14 answers that scored 0, 10
-   were abstentions ("the passages don't contain this") and 4 were confident wrong
-   answers (1–2 per chunk-based method). The agent scored 0 on none.
+1. Top-k retrieval breaks down on questions that require checking every paper. On the 6
+   "which papers do NOT ..." questions, BM25, vector and hybrid scored 0.24 to 0.30. Ten
+   passages can't show that a paper lacks something, while the agent greps every paper
+   and scored 1.00. Question q008, which needs a table from each of two papers, failed
+   for the same reason: one search can't fetch both.
+2. BM25 is enough for a single fact. It answered all 5 single-fact questions correctly,
+   as the agent did, at about a quarter of the cost. Vector and hybrid got 4 of 5.
+3. BM25 ranked best and hybrid found the most papers. The questions share exact terms
+   with the papers, which BM25 rewards (MRR 0.58 against 0.49 for vector). Hybrid found
+   the most gold papers (0.93) but often ranked first a page on the right topic that
+   didn't hold the answer.
+4. The agent has the lowest rank metrics because it doesn't rank by relevance: its
+   results are in the order it searched. Paper recall (1.00) is the retrieval number that
+   means something for it. It answered from `grep` snippets alone on 17 of 20 questions
+   and opened a paper with `read_file` on only 3.
+5. Of the 14 answers that scored 0, 10 said the passages didn't contain the answer and 4
+   were confident wrong answers (one or two per chunk-based method). No agent answer
+   scored 0.
 
 ### Limitations
 
-- **Small.** 20 papers and 20 questions. One question moves accuracy by 0.05, and two
-  question types (cross_doc, unanswerable) have a single question each. One run per
-  method: the agent and the judge are not deterministic, and no variance is measured.
-- **Famous papers.** The corpus is well-known ML papers that the model has read. The
-  agent sometimes says it is answering from memory (q020: "I did not grep these papers.
-  I'm relying on what I know of them"), and the judge counts a correct remembered fact
-  as correct. A corpus the model has never seen (internal documents, papers newer than
-  its training data) is the real test.
-- **Question bias.** 18 of 20 questions were drafted with an LLM by grepping the corpus,
-  the agent's own strategy, then verified by hand (`author: llm`). Only 2 are
-  hand-written, too few for the by-author split to say anything yet.
-- **LLM judge.** The judge (`claude-opus-5-5`) is from the same model family as the
-  writer of every answer. The rubric grades facts against a human reference, and every
-  verdict has a reason that was spot-checked, but judge bias isn't measured.
-- **One configuration.** One answering model, one embedding model (all-MiniLM-L6-v2),
-  one chunking (paragraphs, 1000 characters), k = 10. A larger embedding model, a
-  reranker or more passages could close part of the gap; the agent was not tuned either.
-- **Keyword is missing from the committed run.** A later run that included it ran out
-  of API credit partway and was discarded; its retrieval-only numbers are free to
+- The benchmark is small: 20 papers and 20 questions. One question moves accuracy by
+  0.05, and two question types (cross_doc and unanswerable) have one question each. Each
+  method ran once, and since the agent and the judge aren't deterministic, the variance
+  between runs is unknown.
+- The papers are famous, and the model has read them. The agent sometimes says it is
+  answering from memory (q020: "I did not grep these papers. I'm relying on what I know
+  of them"), and the judge counts a correct remembered fact as correct. A fair test needs
+  documents the model has never seen, such as internal documents or papers newer than
+  its training data.
+- An LLM drafted 18 of the 20 questions by grepping the corpus, which is also how the
+  agent searches. A person checked each one by hand (`author: llm`). Only 2 questions are
+  hand-written, too few for the by-author comparison to show anything yet.
+- The judge (`claude-opus-5-5`) is from the same model family as the model that wrote
+  every answer. It grades facts against a human reference and every verdict has a reason
+  that was spot-checked, but its bias hasn't been measured.
+- Everything ran in one configuration: one answering model, one embedding model
+  (all-MiniLM-L6-v2), paragraph chunks of 1000 characters and k = 10. A larger embedding
+  model, a reranker or more passages could close part of the gap. The agent wasn't tuned
+  either.
+- Keyword search is missing from the committed run. A later run that included it ran out
+  of API credit partway and was discarded. Its retrieval numbers cost nothing to
   reproduce with `ragbench run --methods keyword`.
-- **Known wording issue.** q016 and q019 say "(see q006)", which methods can't see; the
-  agent noted it and answered correctly anyway.
+- Questions q016 and q019 say "(see q006)", which the methods can't see. The agent pointed
+  this out and still answered both correctly.
 
 ## Reproduce the results
 
@@ -173,23 +178,23 @@ ragbench summarize results/<new run>                # compare with the committed
 ragbench chart results/<new run>
 ```
 
-Run at that commit, the new `run.json` should show the same `config_hash` as the
-committed one (`0e31feb80e3f`): it fingerprints the settings, the models and the
-checksums of the question file and the chunks. If it differs, an input differs; the
-usual cause is a different PDF-extraction library version (the committed `run.json` lists
-every package version, e.g. pypdf 6.19.0).
+A run at that commit should have the same `config_hash` in its `run.json` as the
+committed run (`0e31feb80e3f`). The hash covers the settings, the models and the
+checksums of the question file and the chunks, so a different hash means a different
+input. The usual cause is a different version of the PDF-extraction library; the
+committed `run.json` lists every package version (pypdf 6.19.0, for example).
 
 ## Methodology notes
 
-- **No front matter in searchable text.** Metadata lives in `manifest.jsonl`, so no method is helped or hurt by boilerplate tokens.
-- **Bibliographies are stripped.** Reference lists repeat paper titles and keywords from across the field, which creates false matches for every method. They're cut at ingestion (appendices are kept); `manifest.jsonl` records how many characters were removed per paper so this can be audited.
-- **Running headers and page numbers are stripped.** A line at the top or bottom of at least half the pages (e.g. *Published as a conference paper at ICLR 2023*) is boilerplate that would otherwise land in many chunks. Mid-page lines are never touched; the manifest records `boilerplate_lines_removed`.
-- **Paragraphs come from the line layout.** PDF extractors rarely leave blank lines between paragraphs, so a short line that ends a sentence, followed by one that starts a new block, or a section heading, marks a paragraph break. Without this, every page was one "paragraph".
-- **Page offsets are recorded** so answers can be checked against the page they cite.
-- **Pinned inputs.** `data/checksums.sha256` records the SHA-256 of every PDF. Any run on different bytes fails loudly instead of silently producing different numbers.
-- **Metadata is a committed snapshot.** Titles, authors, dates and categories come from the arXiv API once, at download time, and live in `data/metadata.jsonl`. Ingestion never touches the network.
-- **One contract for every method.** Each search backend returns results that point into the documents by position (document, character range, pages), and passes the same contract tests: best first, deterministic ties, no duplicates, results that match the source text. The agent reports the ranges it read, so it can be scored with the same metrics as the chunk-based methods.
-- **Deterministic IDs.** A document's ID is a hash of its bytes, so reruns line up.
+- Paper metadata lives in `manifest.jsonl`, outside the searchable text, so front-matter tokens neither help nor hurt any method.
+- Ingestion cuts the bibliographies and keeps the appendices. Reference lists repeat titles and keywords from across the field and would create false matches for every method. `manifest.jsonl` records how many characters were removed from each paper.
+- A line that appears at the top or bottom of at least half the pages (for example *Published as a conference paper at ICLR 2023*) is a running header or footer and is removed, along with page numbers; otherwise it would land in many chunks. Lines in the middle of a page are never touched, and the manifest records `boilerplate_lines_removed`.
+- Paragraph breaks come from the line layout, because PDF extractors rarely leave blank lines between paragraphs. A short line that ends a sentence followed by a line that starts a new block, or a section heading, marks a break. Without this rule every page came out as a single paragraph.
+- Page offsets are recorded, so an answer can be checked against the page it cites.
+- `data/checksums.sha256` records the SHA-256 of every PDF, and a run on different files stops with an error.
+- Titles, authors, dates and categories come from the arXiv API once, at download time, and are committed in `data/metadata.jsonl`. Ingestion never uses the network.
+- Every search method returns results as positions in the documents (document, character range, pages) and passes the same contract tests: best result first, deterministic ties, no duplicates, and results that match the source text. The agent reports the ranges it read, so the same metrics score it and the chunk-based methods.
+- A document's ID is a hash of its bytes, so reruns line up.
 
 ## Layout
 
@@ -221,13 +226,12 @@ results/                 # committed run outputs (agent transcripts stay local) 
 tests/
 ```
 
-**Where the questions come from.** q001–q002 were written by Swayam. q003–q020 were
-*drafted with an LLM and verified by Swayam* (`author: llm`): drafted from the ingested
-text with a quote and page for each, then checked by hand against the PDFs. The same
-model family powers the agent under test, so the questions lean on details that are hard
-to know without reading this collection (setup details, table values, counts across
-papers), and every run reports accuracy by author so the effect of who wrote a question
-stays visible.
+Swayam wrote questions q001 and q002. An LLM drafted q003 to q020 from the ingested text,
+with a quote and page for each, and Swayam checked them against the PDFs (`author: llm`).
+The same model family powers the agent under test, so the questions focus on details
+that are hard to know without reading this collection, such as setup details, table
+values and counts across papers. Every run reports accuracy by author, so you can see
+whether who wrote a question affects the results.
 
 ## License
 
