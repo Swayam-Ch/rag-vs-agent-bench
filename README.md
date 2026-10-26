@@ -40,7 +40,17 @@ ragbench search -m bm25 --json "BM25 baseline" > results.json
 
 # check the question set (also runs in CI)
 ragbench questions
+
+# run the benchmark: every method on every question -> results/<UTC time>/
+ragbench run                                        # keyword, bm25, vector, hybrid
+ragbench run --methods bm25,agent                   # the agent costs money: opt in
+ragbench run --methods bm25 --questions q001,q006 -k 5
 ```
+
+Each run gets its own folder: `run.json` (config, input checksums, git commit, package
+and model versions, a summary per method) plus one `<method>.jsonl` with a row per
+question (ranked results with pages, retrieval metrics, timing; for the agent also the
+answer, tool calls, tokens and cost). Runs with the same `config_hash` are comparable.
 
 ## Methodology notes
 
@@ -76,7 +86,8 @@ src/ragbench/
 eval/questions.yaml      # the answer key: 10 questions, gold papers + pages (see below)  🚧
   src/ragbench/eval/questions.py # format + validator (`ragbench questions`)            ✅
   src/ragbench/eval/metrics.py   # recall@k, MRR, page hits (page and paper level)     ✅
-results/                 # committed run outputs                                         ⏳
+  src/ragbench/eval/run.py       # `ragbench run`: every method x question, saved      ✅
+results/                 # committed run outputs (agent transcripts stay local)         ⏳
 tests/
 ```
 
