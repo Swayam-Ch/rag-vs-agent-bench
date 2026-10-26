@@ -228,6 +228,7 @@ def run_one(
         "id": question.id,
         "type": question.type,
         "question": question.question,
+        "author": question.author,
         "method": searcher.name,
         "k": k,
         "seconds": seconds,
@@ -298,12 +299,19 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if judged:
         verdicts = Counter(r["judge"]["verdict"] or "unjudged" for r in judged)
         by_type: dict[str, list[float | None]] = {}
+        by_author: dict[str, list[float | None]] = {}
         for r in judged:
             by_type.setdefault(r["type"], []).append(r["judge"]["points"])
+            by_author.setdefault(r.get("author") or "unknown", []).append(r["judge"]["points"])
         summary["answers"] = {
-            "accuracy": mean(r["judge"]["points"] for r in judged),  # correct 1, partial 0.5
+            # points: F1 for list questions, else correct 1 / partial 0.5 / wrong 0
+            "accuracy": mean(r["judge"]["points"] for r in judged),
             "by_type": {t: mean(points) for t, points in by_type.items()},
+            "by_author": {a: mean(points) for a, points in by_author.items()},
             **{v: verdicts.get(v, 0) for v in (*VERDICTS, "unjudged")},
+            "abstained": sum(r["judge"].get("abstained") is True for r in judged),
+            "confidently_wrong": sum(bool(r["judge"].get("confidently_wrong")) for r in judged),
+            "needs_review": [r["id"] for r in judged if r["judge"].get("needs_review")],
             "answer_cost_usd": _total(r["answer"].get("cost_usd") for r in judged),
             # search + writing the answer; the agent's search time already includes it
             "seconds_to_answer": round(
@@ -544,8 +552,16 @@ def format_summary(summary: Mapping[str, Any], k: int) -> list[str]:
         costs = [s["answers"]["judge_cost_usd"] for s in summary.values() if "answers" in s]
         total = None if None in costs else sum(costs)
         lines.append(
-            "accuracy: correct 1, partial 0.5, wrong 0 (all question types); "
+            "accuracy: F1 of papers named for list questions, else correct 1, partial 0.5, "
+            "wrong 0; "
             "time: search + answer; "
             + (f"judging cost ${total:.3f}" if total is not None else "judging cost unknown")
         )
+        review = [
+            f"{name} {qid}"
+            for name, s in summary.items()
+            for qid in s.get("answers", {}).get("needs_review", [])
+        ]
+        if review:
+            lines.append(f"check by hand (verdict and F1 disagree): {', '.join(review)}")
     return lines

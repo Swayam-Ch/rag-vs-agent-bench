@@ -156,6 +156,7 @@ def test_unknown_type_fails_clearly_with_line_number():
         (_doc(_q(qtype="cross_doc")), "at least 2 papers"),
         (_doc(_q(), _q()), "duplicate id 'q001' (first used on line 3)"),
         (_doc(_q(extra="    notes: [1, 2]\n")), "'notes' must be text"),
+        (_doc(_q(extra="    author: [swayam]\n")), "'author' must be text"),
     ],
 )
 def test_each_mistake_is_explained(text, message):
@@ -184,3 +185,9 @@ def test_unknown_paper_and_missing_page_are_reported():
         "line 3: q001: paper 2005.11401 is not in the corpus",
     ]
     assert check_against_corpus(qs, {"2004.04906", "2005.11401"}) == []
+
+
+def test_author_is_optional_and_kept():
+    [q] = parse(_doc(_q(extra="    author: swayam\n"))).questions
+    assert q.author == "swayam"
+    assert parse(_doc(_q())).questions[0].author == ""

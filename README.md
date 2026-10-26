@@ -56,8 +56,11 @@ answer, tool calls, tokens and cost). Runs with the same `config_hash` are compa
 With `--judge`, every method also has to *answer*. The chunk-based methods get an answer
 written from their top-k passages by the agent's model, so only retrieval differs. An LLM
 judge (Opus by default, a different model from the writer) grades each answer against
-the reference as correct, partial or wrong, with a one-line reason. Answer and judge
-tokens, time and cost are recorded per question. The rubric, its pitfalls (self-
+the reference as correct, partial or wrong, with a one-line reason. "Which papers"
+questions are scored by F1 of the papers named against the gold papers (computed in
+code from the papers the judge extracts), so 1 of 10 and 9 of 10 no longer both count
+as "partial". Answers that say "the papers don't say" are counted apart from confident
+wrong answers. Answer and judge tokens, time and cost are recorded per question. The rubric, its pitfalls (self-
 preference, verbosity, the judge's own knowledge) and their mitigations are in
 `src/ragbench/eval/grade.py`; spot-check the verdicts' reasons before trusting them.
 

@@ -14,6 +14,7 @@ A question looks like this:
         - paper: "1706.03762"
           pages: [5]
       notes: optional; why the question is interesting or hard
+      author: optional; who wrote it (e.g. swayam, claude), to split results by author
 
 `gold` pairs each paper with the pages that contain its evidence. The pages are
 alternatives: finding any one of them counts as finding that evidence (see
@@ -43,7 +44,7 @@ import yaml
 
 FORMAT_VERSION = 1
 TYPES = ("single_fact", "multi_filter", "cross_doc", "negation", "unanswerable")
-QUESTION_FIELDS = {"id", "type", "question", "answer", "gold", "notes"}
+QUESTION_FIELDS = {"id", "type", "question", "answer", "gold", "notes", "author"}
 GOLD_FIELDS = {"paper", "pages"}
 _ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 _ARXIV = re.compile(r"^\d{4}\.\d{4,5}$")
@@ -63,6 +64,7 @@ class Question:
     answer: str
     gold: tuple[Evidence, ...] = ()
     notes: str = ""
+    author: str = ""
     line: int = 0  # where it starts in the YAML file, for error messages
 
     @property
@@ -177,6 +179,9 @@ def _parse_question(item: object, where: str, line: int) -> tuple[Question | Non
     notes = item.get("notes", "")
     if not isinstance(notes, str):
         problems.append(f"{where}: 'notes' must be text")
+    author = item.get("author", "")
+    if not isinstance(author, str):
+        problems.append(f"{where}: 'author' must be text, e.g. swayam")
     if problems:
         return None, problems
     return (
@@ -187,6 +192,7 @@ def _parse_question(item: object, where: str, line: int) -> tuple[Question | Non
             answer=item["answer"].strip(),
             gold=tuple(gold),
             notes=notes.strip(),
+            author=author.strip(),
             line=line,
         ),
         [],

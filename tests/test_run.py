@@ -307,7 +307,7 @@ def test_results_keep_their_page_range():
 
 @pytest.fixture
 def grading(monkeypatch):
-    client = GradingClient()
+    client = GradingClient(papers=["2004.04906"])  # the gold paper of the list question q2
     monkeypatch.setattr(grade, "default_client", lambda: client)
     return client
 
@@ -409,3 +409,31 @@ def test_a_failed_search_counts_as_a_wrong_answer():
 def test_unknown_prices_make_the_total_unknown_not_smaller():
     assert run_mod._total([0.1, None, 0.2]) is None
     assert run_mod._total([0.1, 0.2]) == pytest.approx(0.3)
+
+
+def test_summary_counts_abstentions_confident_mistakes_and_authors(setup, monkeypatch, tmp_path):
+    # q1 by swayam, q2 and q3 by claude; the fake judge says "wrong" to everything
+    qfile = tmp_path / "authored.yaml"
+    text = QUESTIONS.replace(
+        "    answer: See Table 3.\n", "    answer: See Table 3.\n    author: swayam\n"
+    )
+    text = text.replace("    answer: DPR.\n", "    answer: DPR.\n    author: claude\n")
+    qfile.write_text(
+        text.replace(
+            "    answer: Not reported.\n", "    answer: Not reported.\n    author: claude\n"
+        )
+    )
+    client = GradingClient(verdict="wrong", papers=["2004.04906"])
+    monkeypatch.setattr(grade, "default_client", lambda: client)
+    base, out = setup
+    base = [*base[:2], "--question-file", str(qfile), *base[4:]]
+    assert _run(base, "--methods", "bm25", "--judge") == 0
+    folder, info = _only_run(out)
+    rows = _rows(folder / "bm25.jsonl")
+    assert [r["author"] for r in rows] == ["swayam", "claude", "claude"]
+    answers = info["summary"]["bm25"]["answers"]
+    # q2 is a list question: it named its one gold paper, so its points are F1 = 1.0
+    # whatever the verdict says; claude's mean is (1.0 + 0.0) / 2
+    assert answers["by_author"] == {"swayam": 0.0, "claude": 0.5}
+    assert answers["abstained"] == 0 and answers["confidently_wrong"] == 2  # q1 and q3
+    assert answers["needs_review"] == ["q2"]  # "wrong" but the gold paper was named
