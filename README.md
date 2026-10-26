@@ -109,7 +109,9 @@ tests/
 page for each, then checked by hand against the PDFs. Because Claude is also one of the
 methods under test, the questions lean on details that are hard to know without reading
 this collection (setup details, table values, counts across papers), and each one says in
-its `notes` how it was drafted.
+its `notes` how it was drafted. q011–q020 (#19, the harder set) were also drafted by
+Claude, on request, and tagged `author: claude`; every run reports accuracy by author, so
+the effect of who wrote a question stays visible.
 
 ## License
 
