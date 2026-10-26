@@ -15,7 +15,10 @@ A question looks like this:
           pages: [5]
       notes: optional; why the question is interesting or hard
 
-`gold` pairs each paper with the pages that contain its evidence. Question types:
+`gold` pairs each paper with the pages that contain its evidence. The pages are
+alternatives: finding any one of them counts as finding that evidence (see
+metrics.py). A question needing two separate facts from one paper lists it twice.
+Question types:
 
 * single_fact   the answer is in one place in one paper
 * multi_filter  "which papers do X (and Y)": the answer is the set of papers in `gold`

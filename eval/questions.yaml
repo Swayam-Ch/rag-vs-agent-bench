@@ -4,7 +4,9 @@
 # * Write the question AND its answer from the papers themselves, BEFORE running any
 #   method on it. Never copy an answer from a method's output: that method would be
 #   grading itself.
-# * `gold` lists every paper (and the pages) a complete answer needs.
+# * `gold` lists every paper (and the pages) a complete answer needs. A paper's pages
+#   are alternatives: retrieving any one of them counts as finding it. If an answer
+#   needs two separate facts from one paper, list that paper twice.
 # * Quote arXiv IDs ("2005.11401"); unquoted, YAML reads them as numbers.
 # * Prefer details a model is unlikely to remember: appendix numbers, footnotes,
 #   "which papers in THIS collection", counts across papers.
