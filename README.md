@@ -10,7 +10,9 @@ Does agentic file search beat vector search? A reproducible benchmark on public 
 > BM25. The agent cost about 4x as much per question and took about 3x as long. Most of
 > the gap comes from questions that require checking every paper, such as "which papers
 > ..." lists and especially "which papers do NOT ...", where the other methods scored
-> 0.24 to 0.30. On single facts, BM25 matched the agent. The sample is small, the papers
+> 0.24 to 0.30. On single facts, BM25 matched the agent. The agent's lead over each other
+> method holds up in a bootstrap test; the differences among the other three mostly don't.
+> The sample is small, the papers
 > are famous and an LLM drafted most of the questions, so read the
 > [limitations](#limitations) before quoting these numbers.
 
@@ -60,6 +62,7 @@ ragbench run --methods bm25,vector,hybrid,agent --judge   # + graded answers (co
 ragbench summarize results/<run>                    # markdown tables for the README
 ragbench chart results/<run>                        # accuracy_by_type.png (needs [plot])
 ragbench sweep                                      # retrieval only, stronger setups (free)
+ragbench stats results/<run>                        # confidence intervals + citation check
 ```
 
 Each run gets its own folder: `run.json` (config, input checksums, git commit, package
@@ -124,6 +127,33 @@ question and include writing the answer. Judging the whole run cost another $0.7
    were confident wrong answers (one or two per chunk-based method). No agent answer
    scored 0.
 
+### How sure are these numbers?
+
+`ragbench stats` ([`stats.md`](results/2026-10-26T120551Z/stats.md)) resamples the 20
+questions 10,000 times to put a 95% interval on each accuracy, and compares methods on the
+same resampled questions.
+
+| comparison | difference | 95% interval | better / same / worse |
+|:---|---:|:---:|:---:|
+| agent vs bm25 | +0.34 | +0.18 to +0.51 | 12 / 8 / 0 |
+| agent vs hybrid | +0.35 | +0.19 to +0.52 | 13 / 7 / 0 |
+| agent vs vector | +0.45 | +0.28 to +0.62 | 14 / 6 / 0 |
+| bm25 vs hybrid | +0.01 | -0.10 to +0.14 | 2 / 14 / 4 |
+| bm25 vs vector | +0.11 | -0.05 to +0.27 | 6 / 12 / 2 |
+| vector vs hybrid | -0.10 | -0.21 to -0.01 | 1 / 12 / 7 |
+
+The agent's lead over every other method is clear: no interval comes near 0, and it was
+never worse on any question. BM25 and hybrid can't be told apart, and vector's deficit is
+borderline. Each method's own accuracy has an interval about 0.35 wide (BM25: 0.49 to
+0.82), so these 20 questions can rank the agent against the rest, but not the other
+three against each other.
+
+The same report checks the agent's citations. Every page it cited for a question with a
+specific gold page was a page its searches had shown it (64 of 64), and its answers cited
+79% of the gold evidence. Only 53% of its citations land on a gold page, because it also
+cites further pages of the right papers (25) and the near-misses it rules out (25), such
+as Self-RAG in q006.
+
 ### Would a better retriever close the gap?
 
 `ragbench sweep` ([`results/sweep-2026-10-26T131914Z`](results/sweep-2026-10-26T131914Z/summary.md))
@@ -167,7 +197,9 @@ differences below 0.05 are within one question.
   between runs is unknown.
 - The papers are famous, and the model has read them. The agent sometimes says it is
   answering from memory (q020: "I did not grep these papers. I'm relying on what I know
-  of them"), and the judge counts a correct remembered fact as correct. A fair test needs
+  of them"), and the judge counts a correct remembered fact as correct. Its citations
+  all point to pages it was shown, but a claim made without a citation can't be checked
+  that way. A fair test needs
   documents the model has never seen, such as internal documents or papers newer than
   its training data.
 - An LLM drafted 18 of the 20 questions by grepping the corpus, which is also how the
@@ -260,6 +292,7 @@ eval/questions.yaml      # the answer key: 20 questions, gold papers + pages (se
   src/ragbench/eval/summarize.py # `ragbench summarize`: markdown tables from a run      ✅
   src/ragbench/eval/chart.py     # `ragbench chart`: accuracy by question type (PNG)    ✅
   src/ragbench/eval/sweep.py     # `ragbench sweep`: embedders, reranker, chunking, k=20 ✅
+  src/ragbench/eval/stats.py     # `ragbench stats`: bootstrap intervals, citation check ✅
 results/                 # committed run outputs (agent transcripts stay local)         ✅
 tests/
 ```
