@@ -285,11 +285,21 @@ def main(argv: list[str] | None = None) -> int:
     report = sub.add_parser("summarize", help="markdown tables from a results folder")
     report.add_argument("run_dir", type=Path, help="e.g. results/2026-10-26T120551Z")
 
+    sweep = sub.add_parser("sweep", help="retrieval-only comparison of stronger setups (free)")
+    sweep.add_argument("--configs", help="comma-separated (default: all); see eval/sweep.py")
+    sweep.add_argument("--question-file", type=Path, default=Path("eval/questions.yaml"))
+    sweep.add_argument("--processed", type=Path, default=Path("data/processed"))
+    sweep.add_argument("--out", type=Path, default=Path("results"))
+
     chart = sub.add_parser("chart", help="accuracy-by-type chart (PNG) for a judged run")
     chart.add_argument("run_dir", type=Path, help="e.g. results/2026-10-26T120551Z")
     chart.add_argument("--out", type=Path, help="default: <run_dir>/accuracy_by_type.png")
 
     args = parser.parse_args(argv)
+    if args.command == "sweep":
+        from ragbench.eval.sweep import main_sweep
+
+        return main_sweep(args)
     if args.command == "chart":
         from ragbench.eval.chart import plot
 

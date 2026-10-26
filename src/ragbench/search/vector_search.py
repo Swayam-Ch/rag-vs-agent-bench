@@ -46,6 +46,29 @@ class Embedder(Protocol):
         """One row per text, shape (len(texts), dimensions)."""
         ...
 
+    # Optional: `embed_query(texts)` for models that encode queries differently from
+    # documents (e.g. with an instruction prefix). VectorSearcher uses it when present.
+
+
+def resolve_revision(model_name: str, revision: str | None) -> str:
+    """The exact commit to load: `revision` if given, else the model's current commit.
+
+    Resolving at load time and recording the result (it becomes part of the embedder's
+    name, so of run.json and the cache fingerprint) keeps a run reproducible even for a
+    model whose revision isn't pinned in the code yet.
+    """
+    if revision:
+        return revision
+    try:
+        from huggingface_hub import model_info
+
+        return model_info(model_name).sha
+    except Exception as exc:  # offline, unknown model, rate limit
+        raise RuntimeError(
+            f"could not look up the current revision of {model_name} ({exc}); "
+            "pass an explicit revision"
+        ) from exc
+
 
 class SentenceTransformerEmbedder:
     """A local model from the sentence-transformers library (`pip install -e ".[vector]"`).
@@ -57,8 +80,10 @@ class SentenceTransformerEmbedder:
     def __init__(
         self,
         model_name: str = DEFAULT_MODEL,
-        revision: str = DEFAULT_REVISION,
+        revision: str | None = DEFAULT_REVISION,
         batch_size: int = 32,
+        query_prefix: str = "",
+        doc_prefix: str = "",
     ):
         try:
             from sentence_transformers import SentenceTransformer
@@ -66,17 +91,27 @@ class SentenceTransformerEmbedder:
             raise ImportError(
                 'vector search needs sentence-transformers: pip install -e ".[vector]"'
             ) from exc
-        self.name = f"{model_name}@{revision}"
+        revision = resolve_revision(model_name, revision)
+        # a document prefix changes the document vectors, so it is part of the name (and
+        # of the cache fingerprint); a query prefix doesn't touch the cached vectors
+        self.name = f"{model_name}@{revision}" + (f" doc:{doc_prefix!r}" if doc_prefix else "")
+        self.query_prefix, self.doc_prefix = query_prefix, doc_prefix
         self.batch_size = batch_size
         self._model = SentenceTransformer(model_name, revision=revision)
 
-    def embed(self, texts: list[str]) -> np.ndarray:
+    def _encode(self, texts: list[str]) -> np.ndarray:
         return self._model.encode(
             texts,
             batch_size=self.batch_size,
             show_progress_bar=len(texts) > 100,
             convert_to_numpy=True,
         )
+
+    def embed(self, texts: list[str]) -> np.ndarray:
+        return self._encode([self.doc_prefix + t for t in texts])
+
+    def embed_query(self, texts: list[str]) -> np.ndarray:
+        return self._encode([self.query_prefix + t for t in texts])
 
 
 def normalize(vectors: np.ndarray) -> np.ndarray:
@@ -133,6 +168,7 @@ class VectorSearcher:
         check_k(k)
         if not query.strip() or not self.chunks:
             return []
-        q = normalize(self.embedder.embed([query]))[0]
+        embed_query = getattr(self.embedder, "embed_query", self.embedder.embed)
+        q = normalize(embed_query([query]))[0]
         similarities = self.matrix @ q  # cosine similarity with every chunk at once
         return top_k(zip(similarities.tolist(), self.chunks, strict=True), k)

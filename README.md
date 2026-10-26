@@ -59,6 +59,7 @@ ragbench run --methods bm25 --questions q001,q006 -k 5
 ragbench run --methods bm25,vector,hybrid,agent --judge   # + graded answers (costs money)
 ragbench summarize results/<run>                    # markdown tables for the README
 ragbench chart results/<run>                        # accuracy_by_type.png (needs [plot])
+ragbench sweep                                      # retrieval only, stronger setups (free)
 ```
 
 Each run gets its own folder: `run.json` (config, input checksums, git commit, package
@@ -213,6 +214,7 @@ src/ragbench/
   search/bm25.py         # BM25 from scratch, cross-checked against rank_bm25            ✅
   search/vector_search.py # embeddings + cosine similarity, cached on disk               ✅
   search/hybrid_search.py # reciprocal rank fusion of any searchers (BM25 + vector)     ✅
+  search/rerank_search.py # cross-encoder reranking of another method's top 50         ✅
   search/agent_tools.py  # list_files / grep / read_file: safe, bounded, logged          ✅
   search/agent_search.py # tool-calling agent loop: limits, transcripts, token usage     ✅
 eval/questions.yaml      # the answer key: 20 questions, gold papers + pages (see below)  ✅
@@ -222,6 +224,7 @@ eval/questions.yaml      # the answer key: 20 questions, gold papers + pages (se
   src/ragbench/eval/grade.py     # answers from passages + LLM judge (`--judge`)         ✅
   src/ragbench/eval/summarize.py # `ragbench summarize`: markdown tables from a run      ✅
   src/ragbench/eval/chart.py     # `ragbench chart`: accuracy by question type (PNG)    ✅
+  src/ragbench/eval/sweep.py     # `ragbench sweep`: embedders, reranker, chunking, k=20 ✅
 results/                 # committed run outputs (agent transcripts stay local)         ✅
 tests/
 ```
