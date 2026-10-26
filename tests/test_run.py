@@ -413,16 +413,14 @@ def test_unknown_prices_make_the_total_unknown_not_smaller():
 
 
 def test_summary_counts_abstentions_confident_mistakes_and_authors(setup, monkeypatch, tmp_path):
-    # q1 by swayam, q2 and q3 by claude; the fake judge says "wrong" to everything
+    # q1 by swayam, q2 and q3 by llm; the fake judge says "wrong" to everything
     qfile = tmp_path / "authored.yaml"
     text = QUESTIONS.replace(
         "    answer: See Table 3.\n", "    answer: See Table 3.\n    author: swayam\n"
     )
-    text = text.replace("    answer: DPR.\n", "    answer: DPR.\n    author: claude\n")
+    text = text.replace("    answer: DPR.\n", "    answer: DPR.\n    author: llm\n")
     qfile.write_text(
-        text.replace(
-            "    answer: Not reported.\n", "    answer: Not reported.\n    author: claude\n"
-        )
+        text.replace("    answer: Not reported.\n", "    answer: Not reported.\n    author: llm\n")
     )
     client = GradingClient(verdict="wrong", papers=["2004.04906"])
     monkeypatch.setattr(grade, "default_client", lambda: client)
@@ -431,11 +429,11 @@ def test_summary_counts_abstentions_confident_mistakes_and_authors(setup, monkey
     assert _run(base, "--methods", "bm25", "--judge") == 0
     folder, info = _only_run(out)
     rows = _rows(folder / "bm25.jsonl")
-    assert [r["author"] for r in rows] == ["swayam", "claude", "claude"]
+    assert [r["author"] for r in rows] == ["swayam", "llm", "llm"]
     answers = info["summary"]["bm25"]["answers"]
     # q2 is a list question: it named its one gold paper, so its points are F1 = 1.0
-    # whatever the verdict says; claude's mean is (1.0 + 0.0) / 2
-    assert answers["by_author"] == {"swayam": 0.0, "claude": 0.5}
+    # whatever the verdict says; llm's mean is (1.0 + 0.0) / 2
+    assert answers["by_author"] == {"swayam": 0.0, "llm": 0.5}
     assert answers["abstained"] == 0 and answers["confidently_wrong"] == 2  # q1 and q3
     assert answers["needs_review"] == ["q2"]  # "wrong" but the gold paper was named
 

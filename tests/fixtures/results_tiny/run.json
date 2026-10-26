@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "status": "finished",
+  "started": "2026-10-26T12:00:00+00:00",
+  "config_hash": "abc123def456",
+  "git": {
+    "commit": "0123456789abcdef",
+    "dirty": false
+  },
+  "inputs": {
+    "questions": {
+      "path": "eval/questions.yaml",
+      "ids": [
+        "q1",
+        "q2"
+      ]
+    }
+  },
+  "config": {
+    "methods": [
+      "bm25",
+      "agent"
+    ],
+    "k": 10,
+    "searchers": {
+      "bm25": {
+        "class": "BM25Searcher"
+      },
+      "agent": {
+        "class": "AgentSearcher",
+        "model": "claude-sonnet-5-5",
+        "max_turns": 15
+      }
+    },
+    "grader": {
+      "answer_model": "claude-sonnet-5-5",
+      "judge_model": "claude-opus-5-5",
+      "judge_prompt": "judge-v2"
+    }
+  },
+  "summary": {
+    "note": "ignored: summarize recomputes from the rows"
+  }
+}
