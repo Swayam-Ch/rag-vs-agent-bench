@@ -2,6 +2,7 @@
 
 import copy
 import hashlib
+import json
 import re
 from types import SimpleNamespace
 
@@ -99,3 +100,41 @@ class PolicyClient:
             start = max(0, int(hit.group(2)) - 20)
             return reply(tool_block("t2", "read_file", doc_id=hit.group(1), start=start, length=60))
         return reply(text_block("Done.\nSources:"))
+
+
+class GradingClient:
+    """Fake client for answering and judging (#18).
+
+    A request with `output_config` is a judge call: it gets {"reason", "verdict"} JSON
+    (the verdict from `verdict`, a string or a function of the request). Any other
+    request is an answer call and gets `answer`. Set `fail` to "answer" or "judge" to
+    make those calls raise, like an API error.
+    """
+
+    def __init__(
+        self,
+        answer="Eight heads.\nSources:\n1706.03762 p.1",
+        verdict="correct",
+        fail=None,
+        judge_stop="end_turn",
+    ):
+        self.answer, self.verdict, self.fail, self.judge_stop = answer, verdict, fail, judge_stop
+        self.calls: list[dict] = []
+        self.messages = _Messages(self)
+
+    def judge_calls(self):
+        return [c for c in self.calls if "output_config" in c]
+
+    def answer_calls(self):
+        return [c for c in self.calls if "output_config" not in c]
+
+    def next_reply(self, request):
+        kind = "judge" if "output_config" in request else "answer"
+        if self.fail == kind:
+            raise RuntimeError(f"{kind} API down")
+        if kind == "answer":
+            return reply(text_block(self.answer), tokens=(1000, 100))
+        verdict = self.verdict(request) if callable(self.verdict) else self.verdict
+        thinking = SimpleNamespace(type="thinking", thinking="")  # must be skipped
+        body = json.dumps({"reason": "compared with the reference", "verdict": verdict})
+        return reply(thinking, text_block(body), stop=self.judge_stop, tokens=(500, 50))

@@ -3,9 +3,10 @@
 import json
 
 import pytest
-from fakes import HashEmbedder, PolicyClient
+from fakes import GradingClient, HashEmbedder, PolicyClient
 
 from ragbench import cli
+from ragbench.eval import grade
 from ragbench.eval import run as run_mod
 from ragbench.eval.questions import parse
 from ragbench.search import agent_search, vector_search
@@ -297,3 +298,114 @@ def test_results_keep_their_page_range():
     r = SearchResult("abc", 0, 5, 4, 5, 1.0, "text")
     row = run_mod._result_row(1, r, "2004.04906")
     assert (row["page"], row["page_end"], row["paper"]) == (4, 5, "2004.04906")
+
+
+# --------------------------------------------------------------------------- #
+# --judge: answers and verdicts (#18)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def grading(monkeypatch):
+    client = GradingClient()
+    monkeypatch.setattr(grade, "default_client", lambda: client)
+    return client
+
+
+def test_judge_adds_answer_verdict_tokens_and_cost_to_every_row(setup, grading, capsys):
+    base, out = setup
+    assert _run(base, "--methods", "bm25", "--judge") == 0
+    folder, info = _only_run(out)
+    rows = _rows(folder / "bm25.jsonl")
+    assert len(grading.answer_calls()) == len(grading.judge_calls()) == 3  # every question
+    for row in rows:
+        answer, judge = row["answer"], row["judge"]
+        assert answer["source"] == "generated" and answer["text"].startswith("Eight heads")
+        assert answer["input_tokens"] == 1000 and answer["cost_usd"] > 0 and answer["seconds"] >= 0
+        assert (judge["verdict"], judge["points"]) == ("correct", 1.0)
+        assert judge["model"] == "claude-opus-5-5" and judge["cost_usd"] > 0
+    # the answer is written from the passages this method retrieved
+    first_prompt = grading.answer_calls()[0]["messages"][0]["content"]
+    assert rows[0]["results"][0]["preview"][:30] in " ".join(first_prompt.split())
+
+    answers = info["summary"]["bm25"]["answers"]
+    assert answers["accuracy"] == 1.0 and answers["correct"] == 3 and answers["unjudged"] == 0
+    assert set(answers["by_type"]) == {"single_fact", "multi_filter", "unanswerable"}
+    assert answers["answer_cost_usd"] == pytest.approx(3 * (1000 * 2 + 100 * 10) / 1e6)
+    assert answers["seconds_to_answer"] == pytest.approx(
+        sum(r["seconds"] + r["answer"]["seconds"] for r in rows), abs=1e-3
+    )
+    grader = info["config"]["grader"]
+    assert (grader["answer_model"], grader["judge_model"]) == (
+        "claude-sonnet-5-5",
+        "claude-opus-5-5",
+    )
+    printed = capsys.readouterr()
+    assert "accuracy" in printed.out and "judging cost $" in printed.out
+    assert "bm25 q1" in printed.err and "correct" in printed.err
+
+
+def test_judging_changes_the_config_hash(setup, grading):
+    base, out = setup
+    assert _run(base, "--methods", "bm25") == 0
+    assert _run(base, "--methods", "bm25", "--judge") == 0
+    assert _run(base, "--methods", "bm25", "--judge", "--judge-model", "claude-sonnet-5-5") == 0
+    hashes = [
+        json.loads((f / "run.json").read_text())["config_hash"] for f in sorted(out.iterdir())
+    ]
+    assert len(set(hashes)) == 3
+
+
+def test_without_judge_nothing_is_answered_or_paid_for(setup, grading):
+    base, out = setup
+    assert _run(base, "--methods", "bm25") == 0
+    folder, info = _only_run(out)
+    assert grading.calls == [] and info["config"]["grader"] is None
+    assert "answer" not in _rows(folder / "bm25.jsonl")[0]
+
+
+def test_the_agent_is_judged_on_its_own_answer(setup, grading, monkeypatch):
+    monkeypatch.setattr(agent_search, "_default_client", PolicyClient)
+    base, out = setup
+    assert _run(base, "--methods", "agent", "--judge", "--questions", "q1") == 0
+    folder, info = _only_run(out)
+    [row] = _rows(folder / "agent.jsonl")
+    assert grading.answer_calls() == []  # no answer written for it
+    assert row["answer"]["source"] == "agent" and row["answer"]["text"].startswith("Done.")
+    assert row["answer"]["cost_usd"] == row["agent"]["cost_usd"]
+    judged = grading.judge_calls()[0]["messages"][0]["content"]
+    assert "<answer>\nDone." in judged
+    assert info["summary"]["agent"]["answers"]["answer_cost_usd"] == pytest.approx(
+        row["agent"]["cost_usd"]
+    )
+
+
+def test_a_failed_answer_call_is_unjudged_not_wrong(setup, monkeypatch):
+    client = GradingClient(fail="answer")
+    monkeypatch.setattr(grade, "default_client", lambda: client)
+    base, out = setup
+    assert _run(base, "--methods", "bm25", "--judge", "--questions", "q1") == 0
+    folder, info = _only_run(out)
+    [row] = _rows(folder / "bm25.jsonl")
+    assert row["answer"]["error"] == "RuntimeError: answer API down"
+    assert row["judge"]["verdict"] is None and client.judge_calls() == []
+    answers = info["summary"]["bm25"]["answers"]
+    assert answers["unjudged"] == 1 and answers["accuracy"] is None  # not a 0
+
+
+def test_a_failed_search_counts_as_a_wrong_answer():
+    grader = grade.Grader(GradingClient(), {})
+    row = run_mod.run_one(Broken(RuntimeError("index missing")), QS[0], 10, {}, grader)
+    assert row["answer"] == {
+        "source": "none",
+        "text": "",
+        "cost_usd": 0.0,
+        "error": "RuntimeError: index missing",
+    }
+    assert (row["judge"]["verdict"], row["judge"]["reason"]) == ("wrong", "no answer was given")
+    assert grader.client.calls == []
+
+
+def test_unknown_prices_make_the_total_unknown_not_smaller():
+    assert run_mod._total([0.1, None, 0.2]) is None
+    assert run_mod._total([0.1, 0.2]) == pytest.approx(0.3)

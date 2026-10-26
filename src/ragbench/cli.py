@@ -270,9 +270,17 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--processed", type=Path, default=Path("data/processed"))
     run.add_argument("--chunks", type=Path, help="chunks file (default: paragraph, 1000)")
     run.add_argument("--out", type=Path, default=Path("results"), help="(default: results/)")
-    run_agent = run.add_argument_group("agent options")
-    run_agent.add_argument("--model", default="claude-sonnet-5-5")
+    run_agent = run.add_argument_group("agent and answer options")
+    run_agent.add_argument(
+        "--model", default="claude-sonnet-5-5", help="the agent's model; also writes answers"
+    )
     run_agent.add_argument("--max-turns", type=int, default=15)
+    run_agent.add_argument(
+        "--judge",
+        action="store_true",
+        help="also answer every question and grade the answers with an LLM judge (costs money)",
+    )
+    run_agent.add_argument("--judge-model", default="claude-opus-5-5")
 
     args = parser.parse_args(argv)
     if args.command == "questions":

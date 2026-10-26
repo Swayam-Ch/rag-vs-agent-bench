@@ -45,12 +45,21 @@ ragbench questions
 ragbench run                                        # keyword, bm25, vector, hybrid
 ragbench run --methods bm25,agent                   # the agent costs money: opt in
 ragbench run --methods bm25 --questions q001,q006 -k 5
+ragbench run --methods bm25,vector,hybrid,agent --judge   # + graded answers (costs money)
 ```
 
 Each run gets its own folder: `run.json` (config, input checksums, git commit, package
 and model versions, a summary per method) plus one `<method>.jsonl` with a row per
 question (ranked results with pages, retrieval metrics, timing; for the agent also the
 answer, tool calls, tokens and cost). Runs with the same `config_hash` are comparable.
+
+With `--judge`, every method also has to *answer*. The chunk-based methods get an answer
+written from their top-k passages by the agent's model, so only retrieval differs. An LLM
+judge (Opus by default, a different model from the writer) grades each answer against
+the reference as correct, partial or wrong, with a one-line reason. Answer and judge
+tokens, time and cost are recorded per question. The rubric, its pitfalls (self-
+preference, verbosity, the judge's own knowledge) and their mitigations are in
+`src/ragbench/eval/grade.py`; spot-check the verdicts' reasons before trusting them.
 
 ## Methodology notes
 
@@ -87,6 +96,7 @@ eval/questions.yaml      # the answer key: 10 questions, gold papers + pages (se
   src/ragbench/eval/questions.py # format + validator (`ragbench questions`)            ✅
   src/ragbench/eval/metrics.py   # recall@k, MRR, page hits (page and paper level)     ✅
   src/ragbench/eval/run.py       # `ragbench run`: every method x question, saved      ✅
+  src/ragbench/eval/grade.py     # answers from passages + LLM judge (`--judge`)         ✅
 results/                 # committed run outputs (agent transcripts stay local)         ⏳
 tests/
 ```
