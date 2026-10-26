@@ -420,9 +420,7 @@ def test_summary_counts_abstentions_confident_mistakes_and_authors(setup, monkey
     )
     text = text.replace("    answer: DPR.\n", "    answer: DPR.\n    author: llm\n")
     qfile.write_text(
-        text.replace(
-            "    answer: Not reported.\n", "    answer: Not reported.\n    author: llm\n"
-        )
+        text.replace("    answer: Not reported.\n", "    answer: Not reported.\n    author: llm\n")
     )
     client = GradingClient(verdict="wrong", papers=["2004.04906"])
     monkeypatch.setattr(grade, "default_client", lambda: client)
