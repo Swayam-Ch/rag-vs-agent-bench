@@ -1,0 +1,420 @@
+{
+  "format": 1,
+  "config": {
+    "sweep": {
+      "bm25": {
+        "method": "bm25",
+        "chunks": "paragraph",
+        "embedder": null,
+        "rerank": false
+      },
+      "vector-minilm": {
+        "method": "vector",
+        "chunks": "paragraph",
+        "embedder": "minilm",
+        "rerank": false
+      },
+      "hybrid-minilm": {
+        "method": "hybrid",
+        "chunks": "paragraph",
+        "embedder": "minilm",
+        "rerank": false
+      },
+      "vector-bge": {
+        "method": "vector",
+        "chunks": "paragraph",
+        "embedder": "bge",
+        "rerank": false
+      },
+      "hybrid-bge": {
+        "method": "hybrid",
+        "chunks": "paragraph",
+        "embedder": "bge",
+        "rerank": false
+      },
+      "bm25+rerank": {
+        "method": "bm25",
+        "chunks": "paragraph",
+        "embedder": null,
+        "rerank": true
+      },
+      "hybrid-bge+rerank": {
+        "method": "hybrid",
+        "chunks": "paragraph",
+        "embedder": "bge",
+        "rerank": true
+      },
+      "bm25-fixed": {
+        "method": "bm25",
+        "chunks": "fixed",
+        "embedder": null,
+        "rerank": false
+      },
+      "vector-minilm-fixed": {
+        "method": "vector",
+        "chunks": "fixed",
+        "embedder": "minilm",
+        "rerank": false
+      },
+      "hybrid-minilm-fixed": {
+        "method": "hybrid",
+        "chunks": "fixed",
+        "embedder": "minilm",
+        "rerank": false
+      }
+    },
+    "k": 20,
+    "chunkings": {
+      "paragraph": {
+        "method": "paragraph",
+        "size": 1000
+      },
+      "fixed": {
+        "method": "fixed",
+        "size": 1000,
+        "overlap": 200
+      }
+    },
+    "searchers": {
+      "bm25": {
+        "class": "BM25Searcher",
+        "k1": 1.5,
+        "b": 0.75,
+        "idf_variant": "lucene",
+        "epsilon": 0.25
+      },
+      "vector-minilm": {
+        "class": "VectorSearcher",
+        "embedder": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+      },
+      "hybrid-minilm": {
+        "class": "HybridSearcher",
+        "depth": 50,
+        "rrf_k": 60,
+        "fuses": [
+          {
+            "class": "BM25Searcher",
+            "k1": 1.5,
+            "b": 0.75,
+            "idf_variant": "lucene",
+            "epsilon": 0.25
+          },
+          {
+            "class": "VectorSearcher",
+            "embedder": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+          }
+        ]
+      },
+      "vector-bge": {
+        "class": "VectorSearcher",
+        "embedder": "BAAI/bge-base-en-v1.5@a5beb1e3e68b9ab74eb54cfd186867f64f240e1a"
+      },
+      "hybrid-bge": {
+        "class": "HybridSearcher",
+        "depth": 50,
+        "rrf_k": 60,
+        "fuses": [
+          {
+            "class": "BM25Searcher",
+            "k1": 1.5,
+            "b": 0.75,
+            "idf_variant": "lucene",
+            "epsilon": 0.25
+          },
+          {
+            "class": "VectorSearcher",
+            "embedder": "BAAI/bge-base-en-v1.5@a5beb1e3e68b9ab74eb54cfd186867f64f240e1a"
+          }
+        ]
+      },
+      "bm25+rerank": {
+        "class": "RerankSearcher",
+        "depth": 50,
+        "reranker": "cross-encoder/ms-marco-MiniLM-L-6-v2@233902d25c440f23af6f7d6e94d2946bac0bee0a",
+        "reranks": {
+          "class": "BM25Searcher",
+          "k1": 1.5,
+          "b": 0.75,
+          "idf_variant": "lucene",
+          "epsilon": 0.25
+        }
+      },
+      "hybrid-bge+rerank": {
+        "class": "RerankSearcher",
+        "depth": 50,
+        "reranker": "cross-encoder/ms-marco-MiniLM-L-6-v2@233902d25c440f23af6f7d6e94d2946bac0bee0a",
+        "reranks": {
+          "class": "HybridSearcher",
+          "depth": 50,
+          "rrf_k": 60,
+          "fuses": [
+            {
+              "class": "BM25Searcher",
+              "k1": 1.5,
+              "b": 0.75,
+              "idf_variant": "lucene",
+              "epsilon": 0.25
+            },
+            {
+              "class": "VectorSearcher",
+              "embedder": "BAAI/bge-base-en-v1.5@a5beb1e3e68b9ab74eb54cfd186867f64f240e1a"
+            }
+          ]
+        }
+      },
+      "bm25-fixed": {
+        "class": "BM25Searcher",
+        "k1": 1.5,
+        "b": 0.75,
+        "idf_variant": "lucene",
+        "epsilon": 0.25
+      },
+      "vector-minilm-fixed": {
+        "class": "VectorSearcher",
+        "embedder": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+      },
+      "hybrid-minilm-fixed": {
+        "class": "HybridSearcher",
+        "depth": 50,
+        "rrf_k": 60,
+        "fuses": [
+          {
+            "class": "BM25Searcher",
+            "k1": 1.5,
+            "b": 0.75,
+            "idf_variant": "lucene",
+            "epsilon": 0.25
+          },
+          {
+            "class": "VectorSearcher",
+            "embedder": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+          }
+        ]
+      }
+    }
+  },
+  "inputs": {
+    "questions": {
+      "path": "eval/questions.yaml",
+      "sha256": "84a58a360a4fd9869d3f17366b7d66fb5c1c680d45054e672628fe5f55df7cc2",
+      "ids": [
+        "q001",
+        "q002",
+        "q003",
+        "q004",
+        "q005",
+        "q006",
+        "q007",
+        "q008",
+        "q009",
+        "q010",
+        "q011",
+        "q012",
+        "q013",
+        "q014",
+        "q015",
+        "q016",
+        "q017",
+        "q018",
+        "q019",
+        "q020"
+      ]
+    },
+    "manifest_sha256": "f0abc703dfbc0c0efc2d71b672ce080f88ed2abbf608476c0317af1d7f6d6ce0"
+  },
+  "config_hash": "305f3c093f3a",
+  "command": [
+    "ragbench",
+    "sweep"
+  ],
+  "git": {
+    "commit": "59c584c4a45a2278c767080364f856df8bb7df05",
+    "dirty": false
+  },
+  "packages": {
+    "rag-vs-agent-bench": "0.1.0",
+    "numpy": "2.5.4",
+    "pypdf": "6.19.0",
+    "pyyaml": "6.0.3",
+    "rank-bm25": "0.2.2",
+    "sentence-transformers": "6.1.0",
+    "transformers": "5.19.0",
+    "torch": "2.14.1",
+    "anthropic": "1.17.0"
+  },
+  "status": "finished",
+  "started": "2026-10-26T13:19:14+00:00",
+  "finished": "2026-10-26T13:19:39+00:00",
+  "summary": {
+    "bm25": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.089,
+      "metrics": {
+        "recall@1": 0.34615384615384615,
+        "recall@3": 0.5448717948717948,
+        "recall@5": 0.608974358974359,
+        "recall@10": 0.6816239316239316,
+        "recall@20": 0.7478632478632478,
+        "recall@all": 0.7478632478632478,
+        "paper_recall@all": 0.9636752136752137,
+        "rr": 0.5758241758241758,
+        "paper_rr": 0.9487179487179488
+      }
+    },
+    "vector-minilm": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.306,
+      "metrics": {
+        "recall@1": 0.2948717948717949,
+        "recall@3": 0.4358974358974359,
+        "recall@5": 0.4807692307692308,
+        "recall@10": 0.6132478632478633,
+        "recall@20": 0.7564102564102565,
+        "recall@all": 0.7564102564102565,
+        "paper_recall@all": 0.9807692307692307,
+        "rr": 0.49561965811965814,
+        "paper_rr": 0.8910256410256411
+      }
+    },
+    "hybrid-minilm": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.339,
+      "metrics": {
+        "recall@1": 0.2371794871794872,
+        "recall@3": 0.4743589743589744,
+        "recall@5": 0.5576923076923077,
+        "recall@10": 0.6816239316239316,
+        "recall@20": 0.7777777777777778,
+        "recall@all": 0.7777777777777778,
+        "paper_recall@all": 0.9914529914529915,
+        "rr": 0.5567226890756303,
+        "paper_rr": 1.0
+      }
+    },
+    "vector-bge": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 1.443,
+      "metrics": {
+        "recall@1": 0.3269230769230769,
+        "recall@3": 0.5021367521367521,
+        "recall@5": 0.5405982905982906,
+        "recall@10": 0.6431623931623931,
+        "recall@20": 0.7756410256410257,
+        "recall@all": 0.7756410256410257,
+        "paper_recall@all": 0.9444444444444445,
+        "rr": 0.6223776223776224,
+        "paper_rr": 0.9487179487179488
+      }
+    },
+    "hybrid-bge": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.594,
+      "metrics": {
+        "recall@1": 0.40384615384615385,
+        "recall@3": 0.46794871794871795,
+        "recall@5": 0.5598290598290598,
+        "recall@10": 0.7393162393162392,
+        "recall@20": 0.7863247863247863,
+        "recall@all": 0.7863247863247863,
+        "paper_recall@all": 0.952991452991453,
+        "rr": 0.6673992673992674,
+        "paper_rr": 1.0
+      }
+    },
+    "bm25+rerank": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 10.195,
+      "metrics": {
+        "recall@1": 0.5064102564102564,
+        "recall@3": 0.5833333333333333,
+        "recall@5": 0.6474358974358974,
+        "recall@10": 0.7585470085470085,
+        "recall@20": 0.7863247863247863,
+        "recall@all": 0.7863247863247863,
+        "paper_recall@all": 0.9722222222222222,
+        "rr": 0.7631257631257632,
+        "paper_rr": 1.0
+      }
+    },
+    "hybrid-bge+rerank": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 11.488,
+      "metrics": {
+        "recall@1": 0.5064102564102564,
+        "recall@3": 0.5833333333333333,
+        "recall@5": 0.6559829059829061,
+        "recall@10": 0.797008547008547,
+        "recall@20": 0.8333333333333334,
+        "recall@all": 0.8333333333333334,
+        "paper_recall@all": 0.9807692307692307,
+        "rr": 0.76996336996337,
+        "paper_rr": 1.0
+      }
+    },
+    "bm25-fixed": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.109,
+      "metrics": {
+        "recall@1": 0.37179487179487175,
+        "recall@3": 0.5512820512820513,
+        "recall@5": 0.6239316239316239,
+        "recall@10": 0.7564102564102565,
+        "recall@20": 0.8418803418803419,
+        "recall@all": 0.8418803418803419,
+        "paper_recall@all": 0.952991452991453,
+        "rr": 0.6217948717948718,
+        "paper_rr": 1.0
+      }
+    },
+    "vector-minilm-fixed": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.208,
+      "metrics": {
+        "recall@1": 0.35256410256410253,
+        "recall@3": 0.5128205128205129,
+        "recall@5": 0.5128205128205129,
+        "recall@10": 0.6282051282051282,
+        "recall@20": 0.797008547008547,
+        "recall@all": 0.797008547008547,
+        "paper_recall@all": 0.9551282051282051,
+        "rr": 0.6314407814407814,
+        "paper_rr": 1.0
+      }
+    },
+    "hybrid-minilm-fixed": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.345,
+      "metrics": {
+        "recall@1": 0.3141025641025641,
+        "recall@3": 0.5384615384615384,
+        "recall@5": 0.5769230769230769,
+        "recall@10": 0.6709401709401709,
+        "recall@20": 0.8418803418803419,
+        "recall@all": 0.8418803418803419,
+        "paper_recall@all": 0.952991452991453,
+        "rr": 0.5938292476754016,
+        "paper_rr": 1.0
+      }
+    }
+  }
+}
