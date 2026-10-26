@@ -7,9 +7,10 @@
 > **Finding:** on 20 questions about 20 ML papers, an LLM agent that searches the papers
 > with `grep` and `read` answered all 20 correctly (accuracy 1.00). Retrieval-augmented
 > answers from the same model scored 0.55 (vector), 0.65 (hybrid) and 0.66 (BM25). The
-> agent cost about 4x as much per question and took about 3x as long. Almost the whole gap
-> is on questions that need *every* paper checked ("which papers do NOT …", 0.24–0.30
-> without the agent). On single facts, BM25 matched the agent. These are small numbers on
+> agent cost about 4x as much per question and took about 3x as long. Most of the gap is
+> on questions that need *every* paper checked: "which papers …" lists, and above all
+> "which papers do NOT …" (0.24–0.30 without the agent). On single facts, BM25 matched
+> the agent. These are small numbers on
 > famous papers with LLM-drafted questions: read [Limitations](#limitations) before
 > quoting them.
 
