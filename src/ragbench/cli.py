@@ -285,7 +285,23 @@ def main(argv: list[str] | None = None) -> int:
     report = sub.add_parser("summarize", help="markdown tables from a results folder")
     report.add_argument("run_dir", type=Path, help="e.g. results/2026-10-26T120551Z")
 
+    chart = sub.add_parser("chart", help="accuracy-by-type chart (PNG) for a judged run")
+    chart.add_argument("run_dir", type=Path, help="e.g. results/2026-10-26T120551Z")
+    chart.add_argument("--out", type=Path, help="default: <run_dir>/accuracy_by_type.png")
+
     args = parser.parse_args(argv)
+    if args.command == "chart":
+        from ragbench.eval.chart import plot
+
+        try:
+            print(plot(args.run_dir, args.out))
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except ImportError:
+            print('error: charts need matplotlib: pip install -e ".[plot]"', file=sys.stderr)
+            return 1
+        return 0
     if args.command == "questions":
         return _questions(args)
     if args.command == "summarize":
