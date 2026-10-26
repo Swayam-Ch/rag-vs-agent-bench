@@ -12,6 +12,9 @@ Does agentic file search beat vector search? A reproducible benchmark on public 
 > ..." lists and especially "which papers do NOT ...", where the other methods scored
 > 0.24 to 0.30. On single facts, BM25 matched the agent. The agent's lead over each other
 > method holds up in a bootstrap test; the differences among the other three mostly don't.
+> Repeat runs agree: the agent scored 1.00 twice more, a smaller model from the same family
+> scored 0.98 at a tenth of the cost, and the strongest retrieval setup from the sweep
+> (hybrid with bge-base and a reranker) answered no better than BM25 (0.62 against 0.64).
 > The sample is small, the papers
 > are famous and an LLM drafted most of the questions, so read the
 > [limitations](#limitations) before quoting these numbers.
@@ -63,6 +66,13 @@ ragbench summarize results/<run>                    # markdown tables for the RE
 ragbench chart results/<run>                        # accuracy_by_type.png (needs [plot])
 ragbench sweep                                      # retrieval only, stronger setups (free)
 ragbench stats results/<run>                        # confidence intervals + citation check
+
+# repeat runs (cost money; each script checks the API key first and stops at a budget)
+scripts/run_model_comparison.sh                     # the agent, two models, 5 runs (~$3)
+scripts/run_retrieval_judged.sh                     # judged hybrid-bge+rerank and bm25 (~$0.90)
+python scripts/run_setup_judged.py hybrid-bge+rerank   # any sweep setup with judged answers
+python scripts/compare_models.py results/model-comparison-runs.txt
+python scripts/compare_retrieval.py                 # -> results/retrieval-judged.md
 ```
 
 Each run gets its own folder: `run.json` (config, input checksums, git commit, package
@@ -114,7 +124,8 @@ question and include writing the answer. Judging the whole run cost another $0.7
    and scored 1.00. Question q008, which needs a table from each of two papers, failed
    for the same reason: one search can't fetch both.
 2. BM25 is enough for a single fact. It answered all 5 single-fact questions correctly,
-   as the agent did, at about a quarter of the cost. Vector and hybrid got 4 of 5.
+   as the agent did, at about a quarter of the cost. Vector and hybrid got 4 of 5. In the
+   BM25 repeat run (below), q002 got half points, so it is 4.5 of 5 there.
 3. BM25 ranked best and hybrid found the most papers. The questions share exact terms
    with the papers, which BM25 rewards (MRR 0.58 against 0.49 for vector). Hybrid found
    the most gold papers (0.93) but often ranked first a page on the right topic that
@@ -181,20 +192,54 @@ bge-base-en-v1.5 plus the reranker, raises recall@10 from 0.68 to 0.80. Fixed
 to 0.84. Every setup finds almost every gold paper somewhere in its top 20 (paper recall
 0.94 to 0.99), so what remains is finding the right page, not the right paper.
 
-So the first run's retrievers were not the strongest available, and a better one would
-likely raise the chunk-based methods' accuracy on single facts and paper lists. It can't
-help with the 6 negation questions, which account for most of the gap: no ranking of
-passages shows that a paper lacks something. Whether better retrieval changes the
-answers hasn't been measured; that needs a judged run of `hybrid-bge+rerank` (about
-$0.40 in API usage). Each question is worth roughly 0.08 of these recall numbers, so
-differences below 0.05 are within one question.
+So the first run's retrievers were not the strongest available. Each question is worth
+roughly 0.08 of these recall numbers, so differences below 0.05 are within one question.
+Whether better retrieval changes the answers is the next section.
+
+### Does better retrieval change the answers?
+
+[`scripts/run_retrieval_judged.sh`](scripts/run_retrieval_judged.sh) ran the strongest
+sweep setup with judged answers, next to a fresh BM25 run, both on the current question
+file (commit `cef77d2`), with the same answer model, judge and k = 10
+([`results/retrieval-judged.md`](results/retrieval-judged.md)).
+
+| setup | run | accuracy | recall@5 | MRR | negation (6) | cost / q | time / q |
+|:---|:---|---:|---:|---:|---:|---:|---:|
+| bm25 | [`162319Z`](results/2026-10-26T162319Z/summary.md) | 0.64 | 0.61 | 0.58 | 0.24 | $0.012 | 4.3 s |
+| hybrid-bge+rerank | [`161300Z`](results/2026-10-26T161300Z/summary.md) | 0.62 | 0.66 | 0.77 | 0.11 | $0.012 | 4.1 s |
+
+Better ranking did not give better answers: the difference is -0.02 (95% interval -0.18
+to +0.13; better on 6 questions, same on 9, worse on 5). The reranked setup did better on
+some "which papers" lists and single facts (1.00 against 0.90) and worse on others, and it
+scored 0.11 on the negation questions, where three answers said that no paper fits. The
+BM25 repeat matched the first run on every question except q002 (0.5 instead of 1.0), so
+answers written from the same passages barely change between runs, even with the
+reworded q016 and q019.
+
+### Does the agent need the larger model?
+
+[`scripts/run_model_comparison.sh`](scripts/run_model_comparison.sh) ran the agent again on
+the current question file: twice with `claude-sonnet-5-5` and three times with
+`claude-haiku-5-5`, every answer judged by `claude-opus-5-5`
+([`results/model-comparison.md`](results/model-comparison.md)).
+
+| agent model | runs | accuracy per run | mean | 95% interval | cost / q | time / q |
+|:---|---:|:---|---:|:---:|---:|---:|
+| claude-haiku-5-5 | 3 | 0.97, 0.99, 0.97 | 0.98 | 0.95 to 1.00 | $0.004 | 11.1 s |
+| claude-sonnet-5-5 | 2 | 1.00, 1.00 | 1.00 | 1.00 to 1.00 | $0.043 | 10.5 s |
+
+Sonnet answered every question correctly again. Haiku costs about a tenth as much and
+never gave a wrong answer or hit the turn limit; each of its 6 partial answers out of 60
+left one paper off a list (q006, q012 twice, q014, q019 twice). The gap is small but
+consistent: -0.02 (95% interval -0.05 to -0.001; worse on 4 questions, never better).
+Haiku still scores far above every chunk-based method.
 
 ### Limitations
 
 - The benchmark is small: 20 papers and 20 questions. One question moves accuracy by
-  0.05, and two question types (cross_doc and unanswerable) have one question each. Each
-  method ran once, and since the agent and the judge aren't deterministic, the variance
-  between runs is unknown.
+  0.05, and two question types (cross_doc and unanswerable) have one question each. BM25
+  and the agent were repeated (above) and barely changed between runs; vector and hybrid
+  ran once.
 - The papers are famous, and the model has read them. The agent sometimes says it is
   answering from memory (q020: "I did not grep these papers. I'm relying on what I know
   of them"), and the judge counts a correct remembered fact as correct. Its citations
@@ -208,10 +253,11 @@ differences below 0.05 are within one question.
 - The judge (`claude-opus-5-5`) is from the same model family as the model that wrote
   every answer. It grades facts against a human reference and every verdict has a reason
   that was spot-checked, but its bias hasn't been measured.
-- The judged run used one configuration: one answering model, one embedding model
-  (all-MiniLM-L6-v2), paragraph chunks of 1000 characters and k = 10. The retrieval sweep
-  above shows that stronger retrieval exists, but its effect on the answers hasn't been
-  measured. The agent wasn't tuned either.
+- Every judged run used one answering model for the chunk-based methods, paragraph chunks
+  of 1000 characters and k = 10. Of the stronger retrieval setups, only hybrid-bge+rerank
+  was judged. The agent wasn't tuned either.
+- The repeat runs use the current question file, the first run the one from `eb37542`
+  (q016 and q019 reworded). Comparisons across the two cross that change.
 - Keyword search is missing from the judged run: a later run that included it ran out of
   API credit partway and was discarded. Its retrieval numbers are in a separate run
   ([`results/2026-10-26T132855Z`](results/2026-10-26T132855Z/summary.md)): recall@5 0.00,
@@ -257,6 +303,11 @@ checksums of the question file and the chunks, so a different hash means a diffe
 input. The usual cause is a different version of the PDF-extraction library; the
 committed `run.json` lists every package version (pypdf 6.19.0, for example).
 
+The repeat runs were made from `cef77d2` with the scripts in `scripts/` (not yet committed
+then, so their `run.json` shows that commit as clean). To repeat them, install with
+`".[dev,vector,agent]"`, export the API key and run `scripts/run_model_comparison.sh` and
+`scripts/run_retrieval_judged.sh`; each stops before a run would pass its `BUDGET`.
+
 ## Methodology notes
 
 - Paper metadata lives in `manifest.jsonl`, outside the searchable text, so front-matter tokens neither help nor hurt any method.
@@ -299,6 +350,7 @@ eval/questions.yaml      # the answer key: 20 questions, gold papers + pages (se
   src/ragbench/eval/sweep.py     # `ragbench sweep`: embedders, reranker, chunking, k=20 ✅
   src/ragbench/eval/stats.py     # `ragbench stats`: bootstrap intervals, citation check ✅
 results/                 # committed run outputs (agent transcripts stay local)         ✅
+scripts/                 # repeat runs with a budget cap, and their comparison reports    ✅
 tests/
 ```
 
