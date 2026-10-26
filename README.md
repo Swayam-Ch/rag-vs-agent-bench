@@ -124,6 +124,41 @@ question and include writing the answer. Judging the whole run cost another $0.7
    were confident wrong answers (one or two per chunk-based method). No agent answer
    scored 0.
 
+### Would a better retriever close the gap?
+
+`ragbench sweep` ([`results/sweep-2026-10-26T131914Z`](results/sweep-2026-10-26T131914Z/summary.md))
+scores retrieval alone, at k = 20 and with no API cost, for stronger setups than the first
+run used. It covers the 13 questions that have evidence to find.
+
+| configuration | chunks | recall@5 | recall@10 | recall@20 | MRR | paper recall@20 | time / q |
+|:---|:---|---:|---:|---:|---:|---:|---:|
+| bm25 | paragraph | 0.61 | 0.68 | 0.75 | 0.58 | 0.96 | 0.00 s |
+| vector-minilm | paragraph | 0.48 | 0.61 | 0.76 | 0.50 | 0.98 | 0.02 s |
+| hybrid-minilm | paragraph | 0.56 | 0.68 | 0.78 | 0.56 | 0.99 | 0.02 s |
+| vector-bge | paragraph | 0.54 | 0.64 | 0.78 | 0.62 | 0.94 | 0.07 s |
+| hybrid-bge | paragraph | 0.56 | 0.74 | 0.79 | 0.67 | 0.95 | 0.03 s |
+| bm25+rerank | paragraph | 0.65 | 0.76 | 0.79 | 0.76 | 0.97 | 0.51 s |
+| hybrid-bge+rerank | paragraph | 0.66 | 0.80 | 0.83 | 0.77 | 0.98 | 0.57 s |
+| bm25-fixed | fixed | 0.62 | 0.76 | 0.84 | 0.62 | 0.95 | 0.01 s |
+| vector-minilm-fixed | fixed | 0.51 | 0.63 | 0.80 | 0.63 | 0.96 | 0.01 s |
+| hybrid-minilm-fixed | fixed | 0.58 | 0.67 | 0.84 | 0.59 | 0.95 | 0.02 s |
+
+The first run's setups are the top three rows. A cross-encoder reranker over the top 50
+(ms-marco-MiniLM-L-6-v2) is the largest single improvement: MRR rises from 0.56 to 0.58
+to 0.76 to 0.77, at about half a second per question. The best setup, hybrid with
+bge-base-en-v1.5 plus the reranker, raises recall@10 from 0.68 to 0.80. Fixed
+1000-character chunks with 200 characters of overlap raise recall@20 for BM25 from 0.75
+to 0.84. Every setup finds almost every gold paper somewhere in its top 20 (paper recall
+0.94 to 0.99), so what remains is finding the right page, not the right paper.
+
+So the first run's retrievers were not the strongest available, and a better one would
+likely raise the chunk-based methods' accuracy on single facts and paper lists. It can't
+help with the 6 negation questions, which account for most of the gap: no ranking of
+passages shows that a paper lacks something. Whether better retrieval changes the
+answers hasn't been measured; that needs a judged run of `hybrid-bge+rerank` (about
+$0.40 in API usage). Each question is worth roughly 0.08 of these recall numbers, so
+differences below 0.05 are within one question.
+
 ### Limitations
 
 - The benchmark is small: 20 papers and 20 questions. One question moves accuracy by
@@ -141,10 +176,10 @@ question and include writing the answer. Judging the whole run cost another $0.7
 - The judge (`claude-opus-5-5`) is from the same model family as the model that wrote
   every answer. It grades facts against a human reference and every verdict has a reason
   that was spot-checked, but its bias hasn't been measured.
-- Everything ran in one configuration: one answering model, one embedding model
-  (all-MiniLM-L6-v2), paragraph chunks of 1000 characters and k = 10. A larger embedding
-  model, a reranker or more passages could close part of the gap. The agent wasn't tuned
-  either.
+- The judged run used one configuration: one answering model, one embedding model
+  (all-MiniLM-L6-v2), paragraph chunks of 1000 characters and k = 10. The retrieval sweep
+  above shows that stronger retrieval exists, but its effect on the answers hasn't been
+  measured. The agent wasn't tuned either.
 - Keyword search is missing from the committed run. A later run that included it ran out
   of API credit partway and was discarded. Its retrieval numbers cost nothing to
   reproduce with `ragbench run --methods keyword`.
