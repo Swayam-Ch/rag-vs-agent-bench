@@ -105,8 +105,9 @@ class PolicyClient:
 class GradingClient:
     """Fake client for answering and judging (#18).
 
-    A request with `output_config` is a judge call: it gets {"reason", "verdict"} JSON
-    (the verdict from `verdict`, a string or a function of the request). Any other
+    A request with `output_config` is a judge call: it gets the judge's JSON (verdict
+    from `verdict`, a string or a function of the request; `papers` and `abstained`
+    for the other fields, `papers` also a list or a function). Any other
     request is an answer call and gets `answer`. Set `fail` to "answer" or "judge" to
     make those calls raise, like an API error.
     """
@@ -117,8 +118,11 @@ class GradingClient:
         verdict="correct",
         fail=None,
         judge_stop="end_turn",
+        papers=(),
+        abstained=False,
     ):
         self.answer, self.verdict, self.fail, self.judge_stop = answer, verdict, fail, judge_stop
+        self.papers, self.abstained = papers, abstained
         self.calls: list[dict] = []
         self.messages = _Messages(self)
 
@@ -136,5 +140,13 @@ class GradingClient:
             return reply(text_block(self.answer), tokens=(1000, 100))
         verdict = self.verdict(request) if callable(self.verdict) else self.verdict
         thinking = SimpleNamespace(type="thinking", thinking="")  # must be skipped
-        body = json.dumps({"reason": "compared with the reference", "verdict": verdict})
+        papers = self.papers(request) if callable(self.papers) else list(self.papers)
+        body = json.dumps(
+            {
+                "reason": "compared with the reference",
+                "answer_papers": papers,
+                "abstained": self.abstained,
+                "verdict": verdict,
+            }
+        )
         return reply(thinking, text_block(body), stop=self.judge_stop, tokens=(500, 50))

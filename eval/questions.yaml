@@ -11,6 +11,7 @@
 # * Prefer details a model is unlikely to remember: appendix numbers, footnotes,
 #   "which papers in THIS collection", counts across papers.
 # * Check it with:  ragbench questions
+# * `author` says who wrote the question, so results can be split by author.
 #
 # Provenance: q001-q002 were written by Swayam. q003-q010 were drafted by Claude on
 # 2026-10-23 from the ingested text (data/processed), each with a short quote and page
@@ -21,6 +22,7 @@ version: 1
 questions:
   - id: q001
     type: single_fact
+    author: swayam
     question: How many parallel attention heads does the base Transformer model use?
     answer: 8 heads (h = 8), each with d_k = d_v = 64.
     gold:
@@ -32,6 +34,7 @@ questions:
 
   - id: q002
     type: single_fact
+    author: swayam
     question: >
       In the Transformer's ablation study, what happens to translation quality as the
       number of attention heads grows, at constant computation?
@@ -49,6 +52,7 @@ questions:
 
   - id: q003
     type: single_fact
+    author: claude
     question: >
       How was the DPR model in the main experiments trained: what batch size, how many
       extra negative passages per question, and for how many epochs on the large datasets?
@@ -67,6 +71,7 @@ questions:
 
   - id: q004
     type: single_fact
+    author: claude
     question: >
       Roughly how many contractors were hired to write demonstrations, compare outputs
       and run the main evaluations for InstructGPT, and through which platforms?
@@ -82,6 +87,7 @@ questions:
 
   - id: q005
     type: single_fact
+    author: claude
     question: >
       How many annotated example trajectories per task type did ReAct use to prompt the
       model in ALFWorld, and where did they come from?
@@ -95,6 +101,7 @@ questions:
 
   - id: q006
     type: multi_filter
+    author: claude
     question: >
       Which papers in the collection report their own experimental results on Natural
       Questions (NQ)?
@@ -130,6 +137,7 @@ questions:
 
   - id: q007
     type: multi_filter
+    author: claude
     question: >
       Which papers use the FAISS library in their own system or experiments (not just
       mention it as background)?
@@ -157,6 +165,7 @@ questions:
 
   - id: q008
     type: cross_doc
+    author: claude
     question: >
       DPR and Contriever both report BM25's top-20 retrieval accuracy on the Natural
       Questions test set. What value does each paper give, and why could they differ?
@@ -180,6 +189,7 @@ questions:
 
   - id: q009
     type: negation
+    author: claude
     question: >
       Which papers in the collection never mention BM25 in their text (main body and
       appendices; the bibliography doesn't count)?
@@ -216,6 +226,7 @@ questions:
 
   - id: q010
     type: unanswerable
+    author: claude
     question: How much money, in US dollars, did it cost to train GPT-3 175B?
     answer: >
       The papers don't say. The GPT-3 paper gives the training compute (several thousand
@@ -227,3 +238,36 @@ questions:
       the collection. Checked: no "$... million" or "training cost" figure in any paper;
       GPT-3 p.39 says "several thousand petaflop/s-days", p.9 and p.31 "due to the cost of
       training" with no amount.
+
+# ---------------------------------------------------------------------------------- #
+# #19: ten harder questions (q011-q020), written by Swayam from the PDFs, without grep
+# ---------------------------------------------------------------------------------- #
+# Aim at what each method finds hard:
+# * Two conditions at once ("use X AND evaluate on Y"): no single passage holds both.
+# * Your own words, not the paper's ("learned sparse retrieval", not "SPLADE"): keyword
+#   search and grep need the paper's exact terms.
+# * Facts that live in a table or appendix, not in the running text.
+# * Negation over a stated group ("Of the papers that propose a retriever, which do
+#   NOT ...?") so the answer list stays checkable. Entries may use `pages: []`.
+# * Say in `notes` why the question is hard, and where you found each answer.
+# Write the answer before running any method on it. Then run `ragbench questions`.
+#
+#  - id: q011
+#    type: multi_filter
+#    author: swayam
+#    question: Which papers <condition 1> and also <condition 2>?
+#    answer: <every paper that meets both; say which near-misses don't, and why>
+#    gold:
+#      - paper: "<arXiv ID>"
+#        pages: [<page with condition 1>, <page with condition 2>]
+#    notes: Hard because <...>.
+#
+#  - id: q016
+#    type: negation
+#    author: swayam
+#    question: Of the papers that <group>, which do NOT <property>?
+#    answer: <the papers that don't>
+#    gold:
+#      - paper: "<arXiv ID>"
+#        pages: []
+#    notes: Hard because <...>. Group checked: <list the papers you looked at>.
