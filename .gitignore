@@ -220,3 +220,5 @@ __marimo__/
 # Project: raw source files and processed output are reproducible from scripts
 data/raw/
 data/processed/
+# agent transcripts quote the papers at length; run rows keep the answer and tool calls
+results/*/transcripts/

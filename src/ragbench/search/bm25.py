@@ -59,6 +59,7 @@ class BM25Searcher:
             raise ValueError(f"need k1 >= 0 and 0 <= b <= 1, got k1={k1}, b={b}")
         self.chunks = chunks
         self.k1, self.b = k1, b
+        self.idf_variant, self.epsilon = idf, epsilon  # recorded in benchmark runs
 
         # Inverted index: word -> [(chunk index, term frequency), ...]. Scoring a query
         # then only touches chunks that contain at least one of its words.

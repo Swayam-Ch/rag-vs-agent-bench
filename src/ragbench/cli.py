@@ -4,6 +4,8 @@
     ragbench search --method vector -k 3 "dense retrieval for open-domain QA"
     ragbench search --method agent "which papers evaluate on Natural Questions?"
     ragbench search --method hybrid --json "LoRA rank" > results.json
+    ragbench questions                  # validate eval/questions.yaml
+    ragbench run --methods bm25,vector  # the benchmark; results/<time>/
 
 Every method searches the same ingested corpus (data/processed by default); the
 chunk-based methods also need a chunks file from `ragbench-chunk`.
@@ -57,40 +59,68 @@ def find_chunks_file(processed: Path, explicit: Path | None = None) -> Path:
     )
 
 
-def build_searcher(args: argparse.Namespace) -> Searcher:
-    """Construct the requested method. Heavy dependencies are imported only when needed."""
-    if args.method == "agent":
+def build_searchers(
+    methods: list[str],
+    processed: Path,
+    chunks: Path | None = None,
+    model: str = "claude-sonnet-5-5",
+    max_turns: int = 15,
+    transcript_dir: Path | None = None,
+) -> dict[str, Searcher]:
+    """Construct the requested methods, sharing what they have in common.
+
+    The chunks are read once, and hybrid reuses the vector searcher (one embedding model
+    in memory, not two). Heavy dependencies are imported only when a method needs them.
+    """
+    unknown = [m for m in methods if m not in METHODS]
+    if unknown:
+        raise ValueError(f"unknown method(s): {', '.join(unknown)}; choose from {METHODS}")
+    built: dict[str, Searcher] = {}
+    if "agent" in methods:
         from ragbench.search.agent_search import AgentSearcher
         from ragbench.search.agent_tools import Corpus
 
-        return AgentSearcher(
-            Corpus.load(args.processed),
-            model=args.model,
-            max_turns=args.max_turns,
-            transcript_dir=args.processed / "transcripts",
+        built["agent"] = AgentSearcher(
+            Corpus.load(processed), model=model, max_turns=max_turns, transcript_dir=transcript_dir
         )
+    chunk_methods = [m for m in methods if m != "agent"]
+    if chunk_methods:
+        chunk_list = read_chunks(find_chunks_file(processed, chunks))
+        if "keyword" in methods:
+            built["keyword"] = KeywordSearcher(chunk_list)
+        if {"bm25", "vector", "hybrid"} & set(methods):
+            from ragbench.search.bm25 import BM25Searcher
 
-    chunks = read_chunks(find_chunks_file(args.processed, args.chunks))
+            bm25 = BM25Searcher(chunk_list)
+            if "bm25" in methods:
+                built["bm25"] = bm25
+        if {"vector", "hybrid"} & set(methods):
+            from ragbench.search import vector_search
 
-    if args.method == "keyword":
-        return KeywordSearcher(chunks)
+            vector = vector_search.VectorSearcher(
+                chunk_list,
+                vector_search.SentenceTransformerEmbedder(),
+                cache_dir=processed / "cache",
+            )
+            if "vector" in methods:
+                built["vector"] = vector
+            if "hybrid" in methods:
+                from ragbench.search.hybrid_search import HybridSearcher
 
-    from ragbench.search.bm25 import BM25Searcher
+                built["hybrid"] = HybridSearcher([bm25, vector])
+    return {m: built[m] for m in methods}  # in the order asked for
 
-    if args.method == "bm25":
-        return BM25Searcher(chunks)
 
-    from ragbench.search import vector_search
-
-    vector = vector_search.VectorSearcher(
-        chunks, vector_search.SentenceTransformerEmbedder(), cache_dir=args.processed / "cache"
-    )
-    if args.method == "vector":
-        return vector
-
-    from ragbench.search.hybrid_search import HybridSearcher
-
-    return HybridSearcher([BM25Searcher(chunks), vector])
+def build_searcher(args: argparse.Namespace) -> Searcher:
+    """The one method `ragbench search` asked for."""
+    return build_searchers(
+        [args.method],
+        args.processed,
+        chunks=args.chunks,
+        model=args.model,
+        max_turns=args.max_turns,
+        transcript_dir=args.processed / "transcripts",
+    )[args.method]
 
 
 def _one_line(text: str, limit: int = SNIPPET_CHARS) -> str:
@@ -228,9 +258,31 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--metadata", type=Path, default=Path("data/metadata.jsonl"))
     check.add_argument("--processed", type=Path, default=Path("data/processed"))
 
+    run = sub.add_parser("run", help="run methods on the question set and save the results")
+    run.add_argument(
+        "--methods",
+        help="comma-separated (default: keyword,bm25,vector,hybrid; the agent costs money, "
+        "so add it explicitly: --methods bm25,agent)",
+    )
+    run.add_argument("--questions", help="comma-separated question ids (default: all)")
+    run.add_argument("-k", type=int, default=10, help="results per question (default 10)")
+    run.add_argument("--question-file", type=Path, default=Path("eval/questions.yaml"))
+    run.add_argument("--processed", type=Path, default=Path("data/processed"))
+    run.add_argument("--chunks", type=Path, help="chunks file (default: paragraph, 1000)")
+    run.add_argument("--out", type=Path, default=Path("results"), help="(default: results/)")
+    run_agent = run.add_argument_group("agent options")
+    run_agent.add_argument("--model", default="claude-sonnet-5-5")
+    run_agent.add_argument("--max-turns", type=int, default=15)
+
     args = parser.parse_args(argv)
     if args.command == "questions":
         return _questions(args)
+    if args.command == "run":
+        if args.k < 1:
+            parser.error("-k must be at least 1")
+        from ragbench.eval.run import main_run
+
+        return main_run(args)
     if args.k < 1:
         parser.error("-k must be at least 1")
     return _search(args)
