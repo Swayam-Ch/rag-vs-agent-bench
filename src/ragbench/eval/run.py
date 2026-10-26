@@ -55,7 +55,7 @@ from ragbench.eval.questions import Question
 from ragbench.search.base import Searcher, SearchResult
 
 FORMAT_VERSION = 1
-KS = (1, 3, 5, 10)  # recall@k reported for each of these that is <= the run's k
+KS = (1, 3, 5, 10, 20)  # recall@k reported for each of these that is <= the run's k
 AGENT_DEPTH = 1_000  # keep all the agent's evidence: it has no natural "top k"
 PREVIEW_CHARS = 100
 PACKAGES = (
@@ -126,6 +126,7 @@ def sha256_file(path: Path) -> str:
 
 def describe(searcher: Searcher) -> dict[str, Any]:
     """The searcher's class and settings, including models and fused sub-searchers."""
+    searcher = getattr(searcher, "inner", searcher)  # a sweep's renamed wrapper
     info: dict[str, Any] = {"class": type(searcher).__name__}
     for attr in _SETTINGS:
         value = getattr(searcher, attr, None)
@@ -137,6 +138,10 @@ def describe(searcher: Searcher) -> dict[str, Any]:
     subs = getattr(searcher, "searchers", None)
     if subs:
         info["fuses"] = [describe(s) for s in subs]
+    scorer = getattr(searcher, "scorer", None)
+    if scorer is not None:
+        info["reranker"] = scorer.name
+        info["reranks"] = describe(searcher.base)
     return info
 
 
@@ -146,9 +151,9 @@ def config_hash(config: Mapping[str, Any]) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:12]
 
 
-def new_run_dir(root: Path, now: datetime) -> Path:
-    """results/<UTC time>; a suffix if two runs start in the same second."""
-    base = now.astimezone(UTC).strftime("%Y-%m-%dT%H%M%SZ")
+def new_run_dir(root: Path, now: datetime, prefix: str = "") -> Path:
+    """results/<prefix><UTC time>; a suffix if two runs start in the same second."""
+    base = prefix + now.astimezone(UTC).strftime("%Y-%m-%dT%H%M%SZ")
     path, n = root / base, 1
     while path.exists():
         n += 1

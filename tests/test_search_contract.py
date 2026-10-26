@@ -23,6 +23,7 @@ from ragbench.search.base import (
 )
 from ragbench.search.bm25 import BM25Searcher
 from ragbench.search.hybrid_search import HybridSearcher
+from ragbench.search.rerank_search import RerankSearcher
 from ragbench.search.vector_search import VectorSearcher
 
 DOCS = {
@@ -55,6 +56,20 @@ def hybrid_bm25_vector(chunks: list[Chunk]) -> HybridSearcher:
     return HybridSearcher([BM25Searcher(chunks), vector_with_hash_embedder(chunks)])
 
 
+class OverlapScorer:
+    """A stand-in cross-encoder: shared words minus 2, so some scores are negative."""
+
+    name = "overlap"
+
+    def score(self, query, texts):
+        q = set(tokenize(query))
+        return [len(q & set(tokenize(t))) - 2.0 for t in texts]
+
+
+def bm25_reranked(chunks: list[Chunk]) -> RerankSearcher:
+    return RerankSearcher(BM25Searcher(chunks), OverlapScorer(), depth=4)
+
+
 def agent_with_policy_client(chunks: list[Chunk]) -> AgentSearcher:
     """The agent on the same documents, driven by a simple scripted 'model'."""
     papers = [Paper(doc_id, DOCS[doc_id], doc_id, [0]) for doc_id in sorted(DOCS)]
@@ -66,6 +81,7 @@ SEARCHERS: list[Callable[[list[Chunk]], Searcher]] = [
     BM25Searcher,
     vector_with_hash_embedder,
     hybrid_bm25_vector,
+    bm25_reranked,
     agent_with_policy_client,
 ]
 
