@@ -291,11 +291,22 @@ def main(argv: list[str] | None = None) -> int:
     sweep.add_argument("--processed", type=Path, default=Path("data/processed"))
     sweep.add_argument("--out", type=Path, default=Path("results"))
 
+    stats = sub.add_parser("stats", help="confidence intervals + agent citation check (free)")
+    stats.add_argument("run_dir", type=Path, help="e.g. results/2026-10-26T120551Z")
+    stats.add_argument(
+        "--question-file", type=Path, help="default: the question file the run recorded"
+    )
+    stats.add_argument("--processed", type=Path, default=Path("data/processed"))
+
     chart = sub.add_parser("chart", help="accuracy-by-type chart (PNG) for a judged run")
     chart.add_argument("run_dir", type=Path, help="e.g. results/2026-10-26T120551Z")
     chart.add_argument("--out", type=Path, help="default: <run_dir>/accuracy_by_type.png")
 
     args = parser.parse_args(argv)
+    if args.command == "stats":
+        from ragbench.eval.stats import main_stats
+
+        return main_stats(args)
     if args.command == "sweep":
         from ragbench.eval.sweep import main_sweep
 
