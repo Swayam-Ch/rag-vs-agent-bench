@@ -1,0 +1,152 @@
+{
+  "format": 1,
+  "config": {
+    "methods": [
+      "hybrid-bge+rerank"
+    ],
+    "k": 10,
+    "searchers": {
+      "hybrid-bge+rerank": {
+        "class": "RerankSearcher",
+        "depth": 50,
+        "reranker": "cross-encoder/ms-marco-MiniLM-L-6-v2@233902d25c440f23af6f7d6e94d2946bac0bee0a",
+        "reranks": {
+          "class": "HybridSearcher",
+          "depth": 50,
+          "rrf_k": 60,
+          "fuses": [
+            {
+              "class": "BM25Searcher",
+              "k1": 1.5,
+              "b": 0.75,
+              "idf_variant": "lucene",
+              "epsilon": 0.25
+            },
+            {
+              "class": "VectorSearcher",
+              "embedder": "BAAI/bge-base-en-v1.5@a5beb1e3e68b9ab74eb54cfd186867f64f240e1a"
+            }
+          ]
+        }
+      }
+    },
+    "grader": {
+      "answer_model": "claude-sonnet-5-5",
+      "judge_model": "claude-opus-5-5",
+      "judge_effort": "medium",
+      "answer_prompt": "answer-v1",
+      "judge_prompt": "judge-v2",
+      "prompts_sha": "abb8f381cda7"
+    },
+    "sweep_setup": {
+      "name": "hybrid-bge+rerank",
+      "method": "hybrid",
+      "chunks": "paragraph",
+      "embedder": "bge",
+      "rerank": true
+    }
+  },
+  "inputs": {
+    "questions": {
+      "path": "eval/questions.yaml",
+      "sha256": "5294e9201ee393b5371ce2f4d5926e99b0c4f3e199fcbba7433a3ec5cbb2dafd",
+      "ids": [
+        "q001",
+        "q002",
+        "q003",
+        "q004",
+        "q005",
+        "q006",
+        "q007",
+        "q008",
+        "q009",
+        "q010",
+        "q011",
+        "q012",
+        "q013",
+        "q014",
+        "q015",
+        "q016",
+        "q017",
+        "q018",
+        "q019",
+        "q020"
+      ]
+    },
+    "manifest_sha256": "f0abc703dfbc0c0efc2d71b672ce080f88ed2abbf608476c0317af1d7f6d6ce0",
+    "chunks": {
+      "setup_chunking": "paragraph"
+    }
+  },
+  "config_hash": "3be3c1d9a546",
+  "command": [
+    "scripts/run_setup_judged.py",
+    "hybrid-bge+rerank"
+  ],
+  "git": {
+    "commit": "cef77d2da5d947879cfcc17376243838de72bdc8",
+    "dirty": false
+  },
+  "python": "3.14.6",
+  "platform": "macOS-14.8.3-arm64-arm-64bit-Mach-O",
+  "packages": {
+    "rag-vs-agent-bench": "0.1.0",
+    "numpy": "2.5.4",
+    "pypdf": "6.19.0",
+    "fonttools": "4.67.0",
+    "huggingface-hub": "1.33.0",
+    "pyyaml": "6.0.3",
+    "rank-bm25": "0.2.2",
+    "sentence-transformers": "6.1.0",
+    "transformers": "5.19.0",
+    "torch": "2.14.1",
+    "anthropic": "1.17.0"
+  },
+  "status": "finished",
+  "started": "2026-10-26T16:13:00+00:00",
+  "finished": "2026-10-26T16:15:28+00:00",
+  "summary": {
+    "hybrid-bge+rerank": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 4.666,
+      "metrics": {
+        "recall@1": 0.5064102564102564,
+        "recall@3": 0.5833333333333333,
+        "recall@5": 0.6559829059829061,
+        "recall@10": 0.797008547008547,
+        "recall@all": 0.797008547008547,
+        "paper_recall@all": 0.9252136752136753,
+        "rr": 0.76996336996337,
+        "paper_rr": 1.0
+      },
+      "answers": {
+        "accuracy": 0.6182738095238095,
+        "by_type": {
+          "single_fact": 1.0,
+          "multi_filter": 0.7426870748299319,
+          "cross_doc": 0.5,
+          "negation": 0.1111111111111111,
+          "unanswerable": 1.0
+        },
+        "by_author": {
+          "swayam": 1.0,
+          "llm": 0.5758597883597883
+        },
+        "correct": 7,
+        "partial": 8,
+        "wrong": 5,
+        "unjudged": 0,
+        "abstained": 4,
+        "confidently_wrong": 2,
+        "needs_review": [
+          "q015"
+        ],
+        "answer_cost_usd": 0.2325,
+        "seconds_to_answer": 82.506,
+        "judge_cost_usd": 0.1851
+      }
+    }
+  }
+}
