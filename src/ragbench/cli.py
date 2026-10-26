@@ -282,9 +282,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_agent.add_argument("--judge-model", default="claude-opus-5-5")
 
+    report = sub.add_parser("summarize", help="markdown tables from a results folder")
+    report.add_argument("run_dir", type=Path, help="e.g. results/2026-10-26T120551Z")
+
     args = parser.parse_args(argv)
     if args.command == "questions":
         return _questions(args)
+    if args.command == "summarize":
+        from ragbench.eval.summarize import render
+
+        try:
+            print(render(args.run_dir), end="")
+        except FileNotFoundError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        return 0
     if args.command == "run":
         if args.k < 1:
             parser.error("-k must be at least 1")

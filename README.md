@@ -46,6 +46,7 @@ ragbench run                                        # keyword, bm25, vector, hyb
 ragbench run --methods bm25,agent                   # the agent costs money: opt in
 ragbench run --methods bm25 --questions q001,q006 -k 5
 ragbench run --methods bm25,vector,hybrid,agent --judge   # + graded answers (costs money)
+ragbench summarize results/<run>                    # markdown tables for the README
 ```
 
 Each run gets its own folder: `run.json` (config, input checksums, git commit, package
@@ -100,6 +101,7 @@ eval/questions.yaml      # the answer key: 10 questions, gold papers + pages (se
   src/ragbench/eval/metrics.py   # recall@k, MRR, page hits (page and paper level)     ✅
   src/ragbench/eval/run.py       # `ragbench run`: every method x question, saved      ✅
   src/ragbench/eval/grade.py     # answers from passages + LLM judge (`--judge`)         ✅
+  src/ragbench/eval/summarize.py # `ragbench summarize`: markdown tables from a run      ✅
 results/                 # committed run outputs (agent transcripts stay local)         ⏳
 tests/
 ```
