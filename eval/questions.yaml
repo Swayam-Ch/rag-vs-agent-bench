@@ -76,8 +76,9 @@ questions:
         pages: [7]
     notes: >
       Drafted by Claude. Quote (p.7): "we hired a team of about 40 contractors on Upwork
-      and through ScaleAI". Repeated in Appendix B (p.19: "We hired about 40 contractors"),
-      so p.19 is accepted evidence too if the metric ever needs it.
+      and through ScaleAI". p.19 repeats "We hired about 40 contractors" but not the
+      platforms, so it is half the answer and deliberately not in gold (a gold page
+      counts as finding the whole fact). Found when hybrid ranked p.19 first.
 
   - id: q005
     type: single_fact
@@ -161,9 +162,10 @@ questions:
       Questions test set. What value does each paper give, and why could they differ?
     answer: >
       DPR reports 59.1 (its own BM25 run); Contriever reports 62.9, taken from Ma et al.
-      (2021). The numbers come from different BM25 implementations and settings, so they
-      are not the same measurement. (For reference: DPR trained on NQ gets 78.4 and
-      unsupervised Contriever 67.8 at top-20.)
+      (2021). Required: both numbers, each with its paper. Optional (don't require it):
+      why they differ, e.g. different BM25 implementations and settings, so they are not
+      the same measurement; and the context that DPR trained on NQ gets 78.4 and
+      unsupervised Contriever 67.8 at top-20.
     gold:
       - paper: "2004.04906"
         pages: [5]
