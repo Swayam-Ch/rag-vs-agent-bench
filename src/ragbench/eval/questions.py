@@ -14,7 +14,7 @@ A question looks like this:
         - paper: "1706.03762"
           pages: [5]
       notes: optional; why the question is interesting or hard
-      author: optional; who wrote it (e.g. swayam, claude), to split results by author
+      author: optional; who wrote it (e.g. swayam, llm), to split results by author
 
 `gold` pairs each paper with the pages that contain its evidence. The pages are
 alternatives: finding any one of them counts as finding that evidence (see

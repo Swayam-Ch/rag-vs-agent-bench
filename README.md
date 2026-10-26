@@ -106,14 +106,13 @@ results/                 # committed run outputs (agent transcripts stay local) 
 tests/
 ```
 
-**Where the questions come from.** q001–q002 were written by Swayam. q003–q010 were
-*drafted by Claude, verified by Swayam*: drafted from the ingested text with a quote and
-page for each, then checked by hand against the PDFs. Because Claude is also one of the
-methods under test, the questions lean on details that are hard to know without reading
-this collection (setup details, table values, counts across papers), and each one says in
-its `notes` how it was drafted. q011–q020 (#19, the harder set) were also drafted by
-Claude, on request, and tagged `author: claude`; every run reports accuracy by author, so
-the effect of who wrote a question stays visible.
+**Where the questions come from.** q001–q002 were written by Swayam. q003–q020 were
+*drafted with an LLM and verified by Swayam* (`author: llm`): drafted from the ingested
+text with a quote and page for each, then checked by hand against the PDFs. The same
+model family powers the agent under test, so the questions lean on details that are hard
+to know without reading this collection (setup details, table values, counts across
+papers), and every run reports accuracy by author so the effect of who wrote a question
+stays visible.
 
 ## License
 

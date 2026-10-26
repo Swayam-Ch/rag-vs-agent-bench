@@ -33,7 +33,7 @@ def test_accuracy_by_type_and_author():
     assert "| single_fact (1) | 1.00 | 1.00 |" in text
     assert "| multi_filter (1) | 0.40 | 1.00 |" in text
     assert "| question type | bm25 | agent |" in text
-    assert "| swayam (1) | 1.00 | 1.00 |" in text and "| claude (1) | 0.40 | 1.00 |" in text
+    assert "| swayam (1) | 1.00 | 1.00 |" in text and "| llm (1) | 0.40 | 1.00 |" in text
 
 
 def test_run_details_and_problems():

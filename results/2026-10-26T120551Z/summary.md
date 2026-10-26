@@ -24,7 +24,7 @@ recall@5, MRR: the gold *pages* in the top 5 / rank of the first one (questions 
 | written by | bm25 | vector | hybrid | agent |
 |:---|---:|---:|---:|---:|
 | swayam (2) | 1.00 | 0.50 | 0.50 | 1.00 |
-| claude (18) | 0.62 | 0.56 | 0.67 | 1.00 |
+| llm (18) | 0.62 | 0.56 | 0.67 | 1.00 |
 
 #### Run details
 
