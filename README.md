@@ -212,9 +212,11 @@ differences below 0.05 are within one question.
   (all-MiniLM-L6-v2), paragraph chunks of 1000 characters and k = 10. The retrieval sweep
   above shows that stronger retrieval exists, but its effect on the answers hasn't been
   measured. The agent wasn't tuned either.
-- Keyword search is missing from the committed run. A later run that included it ran out
-  of API credit partway and was discarded. Its retrieval numbers cost nothing to
-  reproduce with `ragbench run --methods keyword`.
+- Keyword search is missing from the judged run: a later run that included it ran out of
+  API credit partway and was discarded. Its retrieval numbers are in a separate run
+  ([`results/2026-10-26T132855Z`](results/2026-10-26T132855Z/summary.md)): recall@5 0.00,
+  MRR 0.01, paper recall 0.39, far below every other method, as a baseline should be.
+  Its answers were never judged.
 - In the committed run, questions q016 and q019 said "(see q006)", which the methods
   couldn't see. The agent pointed this out and still answered both correctly. The
   wording has since been fixed, so the question file no longer matches that run's
