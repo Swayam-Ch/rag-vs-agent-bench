@@ -75,6 +75,7 @@ src/ragbench/
   search/agent_search.py # tool-calling agent loop: limits, transcripts, token usage     ✅
 eval/questions.yaml      # the answer key: 10 questions, gold papers + pages (see below)  🚧
   src/ragbench/eval/questions.py # format + validator (`ragbench questions`)            ✅
+  src/ragbench/eval/metrics.py   # recall@k, MRR, page hits (page and paper level)     ✅
 results/                 # committed run outputs                                         ⏳
 tests/
 ```
