@@ -144,8 +144,8 @@ run used. It covers the 13 questions that have evidence to find.
 | hybrid-minilm-fixed | fixed | 0.58 | 0.67 | 0.84 | 0.59 | 0.95 | 0.02 s |
 
 The first run's setups are the top three rows. A cross-encoder reranker over the top 50
-(ms-marco-MiniLM-L-6-v2) is the largest single improvement: MRR rises from 0.56 to 0.58
-to 0.76 to 0.77, at about half a second per question. The best setup, hybrid with
+(ms-marco-MiniLM-L-6-v2) is the largest single improvement: it raises MRR from 0.58 to
+0.76 for BM25 and from 0.67 to 0.77 for hybrid-bge, at about half a second per question. The best setup, hybrid with
 bge-base-en-v1.5 plus the reranker, raises recall@10 from 0.68 to 0.80. Fixed
 1000-character chunks with 200 characters of overlap raise recall@20 for BM25 from 0.75
 to 0.84. Every setup finds almost every gold paper somewhere in its top 20 (paper recall
