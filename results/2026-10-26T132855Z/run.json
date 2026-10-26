@@ -1,0 +1,95 @@
+{
+  "format": 1,
+  "config": {
+    "methods": [
+      "keyword"
+    ],
+    "k": 10,
+    "searchers": {
+      "keyword": {
+        "class": "KeywordSearcher"
+      }
+    },
+    "grader": null
+  },
+  "inputs": {
+    "questions": {
+      "path": "eval/questions.yaml",
+      "sha256": "5294e9201ee393b5371ce2f4d5926e99b0c4f3e199fcbba7433a3ec5cbb2dafd",
+      "ids": [
+        "q001",
+        "q002",
+        "q003",
+        "q004",
+        "q005",
+        "q006",
+        "q007",
+        "q008",
+        "q009",
+        "q010",
+        "q011",
+        "q012",
+        "q013",
+        "q014",
+        "q015",
+        "q016",
+        "q017",
+        "q018",
+        "q019",
+        "q020"
+      ]
+    },
+    "manifest_sha256": "f0abc703dfbc0c0efc2d71b672ce080f88ed2abbf608476c0317af1d7f6d6ce0",
+    "chunks": {
+      "file": "chunks.paragraph.1000.jsonl",
+      "sha256": "adbaf9d938ec961ed2d08c58cf7558e25265439bb91aa0ef247bd82cca5897e8"
+    }
+  },
+  "config_hash": "3ea39deeb0dd",
+  "command": [
+    "ragbench",
+    "run",
+    "--methods",
+    "keyword"
+  ],
+  "git": {
+    "commit": "a128bbf78aa9a2923357a6f7f649cca5f0db2f53",
+    "dirty": false
+  },
+  "python": "3.11.15",
+  "platform": "Linux-6.18.44-fc-v153-x86_64-with-glibc2.39",
+  "packages": {
+    "rag-vs-agent-bench": "0.1.0",
+    "numpy": "2.4.4",
+    "pypdf": "3.17.4",
+    "fonttools": "4.62.1",
+    "huggingface-hub": null,
+    "pyyaml": "6.0.3",
+    "rank-bm25": "0.2.2",
+    "sentence-transformers": null,
+    "transformers": null,
+    "torch": null,
+    "anthropic": "1.17.0"
+  },
+  "status": "finished",
+  "started": "2026-10-26T13:28:55+00:00",
+  "finished": "2026-10-26T13:28:55+00:00",
+  "summary": {
+    "keyword": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.194,
+      "metrics": {
+        "recall@1": 0.0,
+        "recall@3": 0.0,
+        "recall@5": 0.0,
+        "recall@10": 0.008547008547008546,
+        "recall@all": 0.008547008547008546,
+        "paper_recall@all": 0.38675213675213677,
+        "rr": 0.010989010989010988,
+        "paper_rr": 0.33589743589743587
+      }
+    }
+  }
+}

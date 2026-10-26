@@ -212,11 +212,15 @@ differences below 0.05 are within one question.
   (all-MiniLM-L6-v2), paragraph chunks of 1000 characters and k = 10. The retrieval sweep
   above shows that stronger retrieval exists, but its effect on the answers hasn't been
   measured. The agent wasn't tuned either.
-- Keyword search is missing from the committed run. A later run that included it ran out
-  of API credit partway and was discarded. Its retrieval numbers cost nothing to
-  reproduce with `ragbench run --methods keyword`.
-- Questions q016 and q019 say "(see q006)", which the methods can't see. The agent pointed
-  this out and still answered both correctly.
+- Keyword search is missing from the judged run: a later run that included it ran out of
+  API credit partway and was discarded. Its retrieval numbers are in a separate run
+  ([`results/2026-10-26T132855Z`](results/2026-10-26T132855Z/summary.md)): recall@5 0.00,
+  MRR 0.01, paper recall 0.39, far below every other method, as a baseline should be.
+  Its answers were never judged.
+- In the committed run, questions q016 and q019 said "(see q006)", which the methods
+  couldn't see. The agent pointed this out and still answered both correctly. The
+  wording has since been fixed, so the question file no longer matches that run's
+  checksum; reproduce from commit `eb37542` as shown below.
 
 ## Reproduce the results
 
@@ -227,8 +231,9 @@ and can differ a little between runs. A full judged run costs about $2.50 in API
 ```bash
 git clone https://github.com/Swayam-Ch/rag-vs-agent-bench && cd rag-vs-agent-bench
 git checkout eb37542            # the commit the committed run was made from
+git show main:constraints.txt > constraints.txt     # the run's exact package versions
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev,vector,agent]"
+pip install -e ".[dev,vector,agent]" -c constraints.txt
 
 ragbench-fetch data/sources.txt data/raw -v
 ragbench-fetch data/sources.txt data/raw --verify   # same PDFs, byte for byte
@@ -241,7 +246,7 @@ export ANTHROPIC_API_KEY=...                        # and ANTHROPIC_WORKSPACE_ID
 ragbench run --methods bm25,vector,hybrid,agent --judge
 
 git checkout main               # the reporting commands came after the run
-pip install -e ".[dev,vector,agent,plot]"
+pip install -e ".[dev,vector,agent,plot]" -c constraints.txt
 ragbench summarize results/<new run>                # compare with the committed summary.md
 ragbench chart results/<new run>
 ```
