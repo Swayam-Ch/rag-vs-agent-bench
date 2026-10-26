@@ -1,0 +1,291 @@
+{
+  "format": 1,
+  "config": {
+    "methods": [
+      "bm25",
+      "vector",
+      "hybrid",
+      "agent"
+    ],
+    "k": 10,
+    "searchers": {
+      "bm25": {
+        "class": "BM25Searcher",
+        "k1": 1.5,
+        "b": 0.75,
+        "idf_variant": "lucene",
+        "epsilon": 0.25
+      },
+      "vector": {
+        "class": "VectorSearcher",
+        "embedder": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+      },
+      "hybrid": {
+        "class": "HybridSearcher",
+        "depth": 50,
+        "rrf_k": 60,
+        "fuses": [
+          {
+            "class": "BM25Searcher",
+            "k1": 1.5,
+            "b": 0.75,
+            "idf_variant": "lucene",
+            "epsilon": 0.25
+          },
+          {
+            "class": "VectorSearcher",
+            "embedder": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+          }
+        ]
+      },
+      "agent": {
+        "class": "AgentSearcher",
+        "model": "claude-sonnet-5-5",
+        "max_turns": 15,
+        "max_seconds": 180.0,
+        "max_tokens": 2048
+      }
+    },
+    "grader": {
+      "answer_model": "claude-sonnet-5-5",
+      "judge_model": "claude-opus-5-5",
+      "judge_effort": "medium",
+      "answer_prompt": "answer-v1",
+      "judge_prompt": "judge-v2",
+      "prompts_sha": "abb8f381cda7"
+    }
+  },
+  "inputs": {
+    "questions": {
+      "path": "eval/questions.yaml",
+      "sha256": "383c7c5daedb5dffaedc7d8dabe4fa5be363bddf908b14f9999842a11f8617e6",
+      "ids": [
+        "q001",
+        "q002",
+        "q003",
+        "q004",
+        "q005",
+        "q006",
+        "q007",
+        "q008",
+        "q009",
+        "q010",
+        "q011",
+        "q012",
+        "q013",
+        "q014",
+        "q015",
+        "q016",
+        "q017",
+        "q018",
+        "q019",
+        "q020"
+      ]
+    },
+    "manifest_sha256": "f0abc703dfbc0c0efc2d71b672ce080f88ed2abbf608476c0317af1d7f6d6ce0",
+    "chunks": {
+      "file": "chunks.paragraph.1000.jsonl",
+      "sha256": "adbaf9d938ec961ed2d08c58cf7558e25265439bb91aa0ef247bd82cca5897e8"
+    }
+  },
+  "config_hash": "0e31feb80e3f",
+  "command": [
+    "ragbench",
+    "run",
+    "--methods",
+    "bm25,vector,hybrid,agent",
+    "--judge"
+  ],
+  "git": {
+    "commit": "eb37542c61d41726a825940d996e458a132f55d3",
+    "dirty": false
+  },
+  "python": "3.14.0",
+  "platform": "macOS-15.7.4-arm64-arm-64bit-Mach-O",
+  "packages": {
+    "rag-vs-agent-bench": "0.1.0",
+    "numpy": "2.5.4",
+    "pypdf": "6.19.0",
+    "pyyaml": "6.0.3",
+    "rank-bm25": "0.2.2",
+    "sentence-transformers": "6.1.0",
+    "transformers": "5.19.0",
+    "torch": "2.14.1",
+    "anthropic": "1.17.0"
+  },
+  "status": "finished",
+  "started": "2026-10-26T12:06:01+00:00",
+  "finished": "2026-10-26T12:18:12+00:00",
+  "summary": {
+    "bm25": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 0.211,
+      "metrics": {
+        "recall@1": 0.34615384615384615,
+        "recall@3": 0.5448717948717948,
+        "recall@5": 0.608974358974359,
+        "recall@10": 0.6816239316239316,
+        "recall@all": 0.6816239316239316,
+        "paper_recall@all": 0.8782051282051282,
+        "rr": 0.5758241758241758,
+        "paper_rr": 0.9487179487179488
+      },
+      "answers": {
+        "accuracy": 0.6617032967032966,
+        "by_type": {
+          "single_fact": 1.0,
+          "multi_filter": 0.7532182103610675,
+          "cross_doc": 0.5,
+          "negation": 0.24358974358974358,
+          "unanswerable": 1.0
+        },
+        "by_author": {
+          "swayam": 1.0,
+          "claude": 0.6241147741147741
+        },
+        "correct": 8,
+        "partial": 8,
+        "wrong": 4,
+        "unjudged": 0,
+        "abstained": 4,
+        "confidently_wrong": 1,
+        "needs_review": [],
+        "answer_cost_usd": 0.2317,
+        "seconds_to_answer": 78.691,
+        "judge_cost_usd": 0.1866
+      }
+    },
+    "vector": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 4.608,
+      "metrics": {
+        "recall@1": 0.2948717948717949,
+        "recall@3": 0.4358974358974359,
+        "recall@5": 0.4807692307692308,
+        "recall@10": 0.6132478632478633,
+        "recall@all": 0.6132478632478633,
+        "paper_recall@all": 0.8675213675213675,
+        "rr": 0.4908119658119658,
+        "paper_rr": 0.8910256410256411
+      },
+      "answers": {
+        "accuracy": 0.5535714285714286,
+        "by_type": {
+          "single_fact": 0.8,
+          "multi_filter": 0.5387755102040817,
+          "cross_doc": 0.5,
+          "negation": 0.3,
+          "unanswerable": 1.0
+        },
+        "by_author": {
+          "swayam": 0.5,
+          "claude": 0.5595238095238095
+        },
+        "correct": 6,
+        "partial": 8,
+        "wrong": 6,
+        "unjudged": 0,
+        "abstained": 6,
+        "confidently_wrong": 1,
+        "needs_review": [],
+        "answer_cost_usd": 0.2273,
+        "seconds_to_answer": 84.628,
+        "judge_cost_usd": 0.1841
+      }
+    },
+    "hybrid": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 3.089,
+      "metrics": {
+        "recall@1": 0.2371794871794872,
+        "recall@3": 0.4743589743589744,
+        "recall@5": 0.5576923076923077,
+        "recall@10": 0.6816239316239316,
+        "recall@all": 0.6816239316239316,
+        "paper_recall@all": 0.9252136752136753,
+        "rr": 0.5521978021978022,
+        "paper_rr": 1.0
+      },
+      "answers": {
+        "accuracy": 0.6547456709956709,
+        "by_type": {
+          "single_fact": 0.8,
+          "multi_filter": 0.8447278911564625,
+          "cross_doc": 0.5,
+          "negation": 0.28030303030303033,
+          "unanswerable": 1.0
+        },
+        "by_author": {
+          "swayam": 0.5,
+          "claude": 0.6719396344396344
+        },
+        "correct": 6,
+        "partial": 10,
+        "wrong": 4,
+        "unjudged": 0,
+        "abstained": 3,
+        "confidently_wrong": 2,
+        "needs_review": [
+          "q014"
+        ],
+        "answer_cost_usd": 0.2258,
+        "seconds_to_answer": 78.919,
+        "judge_cost_usd": 0.1863
+      }
+    },
+    "agent": {
+      "questions": 20,
+      "scored": 13,
+      "errors": 0,
+      "seconds": 220.798,
+      "metrics": {
+        "recall@1": 0.1346153846153846,
+        "recall@3": 0.36538461538461536,
+        "recall@5": 0.4508547008547008,
+        "recall@10": 0.547008547008547,
+        "recall@all": 0.9722222222222222,
+        "paper_recall@all": 1.0,
+        "rr": 0.40466840851456237,
+        "paper_rr": 0.9276018099547512
+      },
+      "answers": {
+        "accuracy": 1.0,
+        "by_type": {
+          "single_fact": 1.0,
+          "multi_filter": 1.0,
+          "cross_doc": 1.0,
+          "negation": 1.0,
+          "unanswerable": 1.0
+        },
+        "by_author": {
+          "swayam": 1.0,
+          "claude": 1.0
+        },
+        "correct": 20,
+        "partial": 0,
+        "wrong": 0,
+        "unjudged": 0,
+        "abstained": 1,
+        "confidently_wrong": 0,
+        "needs_review": [],
+        "answer_cost_usd": 0.9094,
+        "seconds_to_answer": 220.798,
+        "judge_cost_usd": 0.2019
+      },
+      "agent": {
+        "input_tokens": 335341,
+        "output_tokens": 23871,
+        "cost_usd": 0.9094,
+        "stops": {
+          "answered": 20
+        }
+      }
+    }
+  }
+}
