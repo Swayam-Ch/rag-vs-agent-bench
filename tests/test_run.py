@@ -240,7 +240,8 @@ def test_errors_are_counted_and_the_run_finishes(tmp_path):
         out_dir=tmp_path,
         info={},
     )
-    assert info["status"] == "finished" and info["summary"]["broken"]["errors"] == 3
+    # the run completes, but is marked: a run with errors isn't a clean result
+    assert info["status"] == "finished_with_errors" and info["summary"]["broken"]["errors"] == 3
     assert len(_rows(tmp_path / "broken.jsonl")) == 3
 
 
@@ -384,7 +385,7 @@ def test_a_failed_answer_call_is_unjudged_not_wrong(setup, monkeypatch):
     client = GradingClient(fail="answer")
     monkeypatch.setattr(grade, "default_client", lambda: client)
     base, out = setup
-    assert _run(base, "--methods", "bm25", "--judge", "--questions", "q1") == 0
+    assert _run(base, "--methods", "bm25", "--judge", "--questions", "q1") == 2  # flagged
     folder, info = _only_run(out)
     [row] = _rows(folder / "bm25.jsonl")
     assert row["answer"]["error"] == "RuntimeError: answer API down"
@@ -437,3 +438,35 @@ def test_summary_counts_abstentions_confident_mistakes_and_authors(setup, monkey
     assert answers["by_author"] == {"swayam": 0.0, "claude": 0.5}
     assert answers["abstained"] == 0 and answers["confidently_wrong"] == 2  # q1 and q3
     assert answers["needs_review"] == ["q2"]  # "wrong" but the gold paper was named
+
+
+def test_agent_api_failures_are_unjudged_and_the_run_is_flagged(
+    setup, grading, monkeypatch, capsys
+):
+    # what happened when the API credit ran out: every agent call failed with a 400
+    class NoCredit:
+        def __init__(self):
+            from fakes import _Messages
+
+            self.messages = _Messages(self)
+            self.calls = []
+
+        def next_reply(self, request):
+            raise RuntimeError("Your credit balance is too low to access the Anthropic API")
+
+    monkeypatch.setattr(agent_search, "_default_client", NoCredit)
+    base, out = setup
+    assert _run(base, "--methods", "agent", "--judge", "--questions", "q1") == 2
+    folder, info = _only_run(out)
+    [row] = _rows(folder / "agent.jsonl")
+    assert row["judge"]["verdict"] is None and "credit balance" in row["judge"]["reason"]
+    assert info["status"] == "finished_with_errors"
+    assert info["summary"]["agent"]["answers"]["unjudged"] == 1  # not "wrong"
+    assert info["summary"]["agent"]["answers"]["accuracy"] is None  # not 0
+    assert "don't commit it" in capsys.readouterr().err
+
+
+def test_a_clean_run_is_finished(setup):
+    base, out = setup
+    assert _run(base, "--methods", "bm25") == 0
+    assert _only_run(out)[1]["status"] == "finished"

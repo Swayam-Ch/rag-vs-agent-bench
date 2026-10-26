@@ -274,6 +274,9 @@ def _answer_and_judge(
     if answer["source"] == "generated" and answer["error"]:
         # our own answering call failed: that says nothing about the method
         judgement = Judgement(None, "not judged: the answer could not be generated", None)
+    elif answer["source"] == "agent" and answer["stop"] == "error":
+        # the API failed under the agent (no credit, outage): not the method's mistake
+        judgement = Judgement(None, f"not judged: the agent's API call failed: {a['error']}", None)
     else:
         judgement = grader.judge(question, answer["text"])
     return answer, judgement.to_json()
@@ -372,6 +375,7 @@ def run_benchmark(
         "summary": {},
     }
     _write_json(out_dir / "run.json", run_info)
+    problems = 0  # errors and unjudged answers: a run with any is not a clean result
     try:
         for name, searcher in searchers.items():
             rows = []
@@ -382,11 +386,14 @@ def run_benchmark(
                     f.flush()  # a crash keeps every finished row
                     rows.append(row)
                     flag = " ERROR" if row["error"] else ""
+                    if row["error"]:
+                        problems += 1
                     if "judge" in row:
                         flag += f" {row['judge']['verdict'] or 'unjudged'}"
+                        problems += row["judge"]["verdict"] is None and not row["error"]
                     progress(f"{name} {question.id} {row['seconds']:.2f}s{flag}")
             run_info["summary"][name] = summarize(rows)
-        run_info["status"] = "finished"
+        run_info["status"] = "finished_with_errors" if problems else "finished"
     except KeyboardInterrupt:
         run_info["status"] = "interrupted"
         raise
@@ -521,6 +528,13 @@ def main_run(args: Any) -> int:
         return 130
     print("\n".join(format_summary(run_info["summary"], args.k)))
     print(f"\nsaved to {out_dir}")
+    if run_info["status"] != "finished":
+        print(
+            f"WARNING: this run had errors or unjudged answers (status {run_info['status']}); "
+            "check the rows' error fields (API key, credit balance) and don't commit it",
+            file=sys.stderr,
+        )
+        return 2
     return 0
 
 
