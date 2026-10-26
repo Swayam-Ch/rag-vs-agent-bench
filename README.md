@@ -4,17 +4,28 @@
 
 **Does agentic file search beat vector search?** A reproducible benchmark on public data.
 
-This repo compares three ways of answering questions over a document corpus:
+> **Finding:** on 20 questions about 20 ML papers, an LLM agent that searches the papers
+> with `grep` and `read` answered all 20 correctly (accuracy 1.00). Retrieval-augmented
+> answers from the same model scored 0.55 (vector), 0.65 (hybrid) and 0.66 (BM25). The
+> agent cost about 4x as much per question and took about 3x as long. Most of the gap is
+> on questions that need *every* paper checked: "which papers …" lists, and above all
+> "which papers do NOT …" (0.24–0.30 without the agent). On single facts, BM25 matched
+> the agent. These are small numbers on
+> famous papers with LLM-drafted questions: read [Limitations](#limitations) before
+> quoting them.
+
+The benchmark compares these ways of answering questions over a document collection:
 
 | Method  | How it finds context |
 |---------|----------------------|
+| Keyword | count of query words in each chunk (a floor, not a contender) |
+| BM25    | classic lexical ranking, implemented from scratch |
 | Vector  | embed chunks, cosine similarity |
-| Hybrid  | vector + BM25, fused |
-| Agent   | an LLM with `list` / `grep` / `read` tools over the raw markdown |
+| Hybrid  | BM25 + vector, fused by reciprocal rank |
+| Agent   | an LLM with `list_files` / `grep` / `read_file` tools over the raw text |
 
-All three search the *same* ingested text, answer the *same* versioned question set, and every run's raw output is committed under `results/`.
-
-> Status: 🚧 week 1 — ingestion pipeline. No findings yet.
+All of them search the *same* ingested text, answer the *same* versioned question set,
+and every run's raw output is committed under `results/`.
 
 ## Quickstart
 
@@ -68,9 +79,11 @@ preference, verbosity, the judge's own knowledge) and their mitigations are in
 
 ## Results
 
-First full run ([`results/2026-10-26T120551Z`](results/2026-10-26T120551Z/summary.md)):
-4 methods x 20 questions, answers graded by an LLM judge. Findings and limitations come
-with #23; the full tables are in the run's `summary.md`.
+First full run ([`results/2026-10-26T120551Z`](results/2026-10-26T120551Z/summary.md)),
+from commit `eb37542`: 4 methods x 20 questions, top 10 passages per question, answers
+graded by an LLM judge. The chunk-based methods' answers were written by the agent's
+model (`claude-sonnet-5-5`) from their passages, so only retrieval differs between them.
+Full tables, per-type and per-author breakdowns are in the run's `summary.md`.
 
 ![Accuracy by question type, per method](results/2026-10-26T120551Z/accuracy_by_type.png)
 
@@ -80,6 +93,91 @@ with #23; the full tables are in the run's `summary.md`.
 | **vector** | 0.48 | 0.49 | 0.87 | 0.55 | $0.011 | 4.2 s |
 | **hybrid** | 0.56 | 0.55 | 0.93 | 0.65 | $0.011 | 3.9 s |
 | **agent** | 0.45 | 0.40 | 1.00 | 1.00 | $0.045 | 11.0 s |
+
+recall@5 and MRR: did the gold *page* appear in the top 5, and how high was the first one.
+Paper recall: the share of gold papers found anywhere in what a method returned.
+Accuracy: correct 1, partial 0.5, wrong 0, except "which papers" questions, which score
+the F1 of the papers named. Cost and time are per question and include writing the
+answer; judging the run cost another $0.76.
+
+### What the numbers show
+
+1. **Exhaustive questions are where top-k retrieval breaks.** On "which papers do NOT
+   …" (6 questions), BM25, vector and hybrid scored 0.24–0.30. Ten passages can't show
+   that a paper *lacks* something; the agent greps every paper and gets 1.00. Questions
+   that need two papers' tables at once (q008) fail the same way: one search can't fetch
+   both.
+2. **For a single fact, BM25 is enough.** BM25 answered all 5 single-fact questions
+   correctly, like the agent, at a quarter of the cost. Vector and hybrid got 4 of 5.
+3. **BM25 ranks best; hybrid finds the most.** The questions share exact terms with the
+   papers, which BM25 rewards (MRR 0.58 against vector's 0.49). Hybrid found the most gold
+   papers (0.93) but often put a near-miss page first.
+4. **The agent's rank metrics are the lowest, and that's expected.** Its "ranking" is
+   the order in which it searched, not relevance; paper recall (1.00) is its meaningful
+   retrieval number. It answered from `grep` snippets alone on 17 of 20 questions;
+   only 3 times did it open a paper with `read_file`.
+5. **Failing honestly vs failing confidently.** Of the 14 answers that scored 0, 10
+   were abstentions ("the passages don't contain this") and 4 were confident wrong
+   answers (1–2 per chunk-based method). The agent scored 0 on none.
+
+### Limitations
+
+- **Small.** 20 papers and 20 questions. One question moves accuracy by 0.05, and two
+  question types (cross_doc, unanswerable) have a single question each. One run per
+  method: the agent and the judge are not deterministic, and no variance is measured.
+- **Famous papers.** The corpus is well-known ML papers that the model has read. The
+  agent sometimes says it is answering from memory (q020: "I did not grep these papers.
+  I'm relying on what I know of them"), and the judge counts a correct remembered fact
+  as correct. A corpus the model has never seen (internal documents, papers newer than
+  its training data) is the real test.
+- **Question bias.** 18 of 20 questions were drafted with an LLM by grepping the corpus,
+  the agent's own strategy, then verified by hand (`author: llm`). Only 2 are
+  hand-written, too few for the by-author split to say anything yet.
+- **LLM judge.** The judge (`claude-opus-5-5`) is from the same model family as the
+  writer of every answer. The rubric grades facts against a human reference, and every
+  verdict has a reason that was spot-checked, but judge bias isn't measured.
+- **One configuration.** One answering model, one embedding model (all-MiniLM-L6-v2),
+  one chunking (paragraphs, 1000 characters), k = 10. A larger embedding model, a
+  reranker or more passages could close part of the gap; the agent was not tuned either.
+- **Keyword is missing from the committed run.** A later run that included it ran out
+  of API credit partway and was discarded; its retrieval-only numbers are free to
+  reproduce with `ragbench run --methods keyword`.
+- **Known wording issue.** q016 and q019 say "(see q006)", which methods can't see; the
+  agent noted it and answered correctly anyway.
+
+## Reproduce the results
+
+Retrieval metrics (recall, MRR) are deterministic. Answers and verdicts come from LLMs
+and can differ a little between runs. A full judged run costs about $2.50 in API usage
+(prices checked 2026-10-21) and takes about 10 minutes.
+
+```bash
+git clone https://github.com/Swayam-Ch/rag-vs-agent-bench && cd rag-vs-agent-bench
+git checkout eb37542            # the commit the committed run was made from
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev,vector,agent]"
+
+ragbench-fetch data/sources.txt data/raw -v
+ragbench-fetch data/sources.txt data/raw --verify   # same PDFs, byte for byte
+ragbench-ingest data/raw data/processed -v
+ragbench-chunk data/processed                       # paragraph chunks, 1000 characters
+ragbench questions                                  # 20 questions OK
+
+export ANTHROPIC_API_KEY=...                        # and ANTHROPIC_WORKSPACE_ID if your
+                                                    # key spans several workspaces
+ragbench run --methods bm25,vector,hybrid,agent --judge
+
+git checkout main               # the reporting commands came after the run
+pip install -e ".[dev,vector,agent,plot]"
+ragbench summarize results/<new run>                # compare with the committed summary.md
+ragbench chart results/<new run>
+```
+
+Run at that commit, the new `run.json` should show the same `config_hash` as the
+committed one (`0e31feb80e3f`): it fingerprints the settings, the models and the
+checksums of the question file and the chunks. If it differs, an input differs; the
+usual cause is a different PDF-extraction library version (the committed `run.json` lists
+every package version, e.g. pypdf 6.19.0).
 
 ## Methodology notes
 
@@ -112,14 +210,14 @@ src/ragbench/
   search/hybrid_search.py # reciprocal rank fusion of any searchers (BM25 + vector)     ✅
   search/agent_tools.py  # list_files / grep / read_file: safe, bounded, logged          ✅
   search/agent_search.py # tool-calling agent loop: limits, transcripts, token usage     ✅
-eval/questions.yaml      # the answer key: 10 questions, gold papers + pages (see below)  🚧
+eval/questions.yaml      # the answer key: 20 questions, gold papers + pages (see below)  ✅
   src/ragbench/eval/questions.py # format + validator (`ragbench questions`)            ✅
   src/ragbench/eval/metrics.py   # recall@k, MRR, page hits (page and paper level)     ✅
   src/ragbench/eval/run.py       # `ragbench run`: every method x question, saved      ✅
   src/ragbench/eval/grade.py     # answers from passages + LLM judge (`--judge`)         ✅
   src/ragbench/eval/summarize.py # `ragbench summarize`: markdown tables from a run      ✅
   src/ragbench/eval/chart.py     # `ragbench chart`: accuracy by question type (PNG)    ✅
-results/                 # committed run outputs (agent transcripts stay local)         ⏳
+results/                 # committed run outputs (agent transcripts stay local)         ✅
 tests/
 ```
 
